@@ -1,0 +1,115 @@
+---
+title: "Trabalho de Análise de Regressão - preços de casas de Windsor em 1987"
+author: 
+- "Augusto Tonidandel Caramelli"
+- "Davi Ladeira Balsamão"
+- "Henrique Maia Carvalho Vila Real"
+- "Maria Clara Pereira de Souza"
+- "Thais Rodrigues Antunes Sá"
+format: html
+editor: visual
+---
+
+# 1. Preparação e limpeza dos dados
+
+## 1.1. Importação de dados e carregamento dos pacotes
+
+```{r}
+library(tidyverse)
+
+casas <- read.csv("dados/casas.csv")
+```
+
+## 1.2. Estrutura do banco de dados
+
+```{r}
+glimpse(casas)
+
+dim(casas)
+
+names(casas)
+
+str(casas)
+
+head(casas)
+
+summary(casas)
+```
+
+## 1.3. Verificação de valores ausentes
+
+```{r}
+# Total de valores ausentes
+sum(is.na(casas))
+```
+
+## 1.4. Verificação de duplicatas
+
+```{r}
+sum(duplicated(casas))
+
+which(duplicated(casas))
+
+casas[duplicated(casas) | duplicated(casas, fromLast = TRUE), ]
+
+casas <- casas[-535, ]
+```
+
+## 1.5. Classificação e conversão das variáveis
+
+```{r}
+variaveis_categoricas <- c(
+  "entrada_carro",
+  "area_recreacao",
+  "porao",
+  "aquecimento_gas",
+  "ar_condicionado",
+  "area_preferencial"
+)
+
+casas <- casas %>%
+  mutate(
+    across(
+      all_of(variaveis_categoricas),
+      ~ factor(
+        trimws(tolower(.x)),
+        levels = c("não", "sim"),
+        labels = c("Não", "Sim")
+      )
+    )
+  )
+```
+
+## 1.6. Banco de dados tratado
+
+```{r}
+# Conferir tudo de novo
+str(casas)
+
+lapply(casas[variaveis_categoricas], levels)
+
+colSums(is.na(casas))
+
+sum(duplicated(casas))
+
+summary(casas)
+```
+
+
+```{r}
+write.csv(casas,"casas_tratado.csv")
+
+saveRDS(
+  casas,("casas_tratado.rds")
+)
+```
+
+# 2. Análise descritiva
+
+# 3. Modelo inicial e diagnóstico
+
+# 4. Problemas e correções
+
+# 5. Seleção e modelo final
+
+# 6. Conclusão
