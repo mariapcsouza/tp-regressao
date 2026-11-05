@@ -1,12 +1,27 @@
 ---
-title: "Trabalho de Análise de Regressão - preços de casas de Windsor em 1987"
+title: "Trabalho de Análise de Regressão: preços de casas de Windsor em 1987"
 author: 
 - "Augusto Tonidandel Caramelli"
 - "Davi Ladeira Balsamão"
 - "Henrique Maia Carvalho Vila Real"
 - "Maria Clara Pereira de Souza"
 - "Thais Rodrigues Antunes Sá"
-format: html
+date: today
+date-format: "DD/MM/YYYY"
+lang: pt
+format:
+  html:
+    embed-resources: true
+    toc: true
+    toc-depth: 3
+    toc-title: "Sumário"
+    theme: cosmo
+    df-print: kable
+    fig-align: center
+execute:
+  echo: true
+  message: false
+  warning: false
 editor: visual
 ---
 
@@ -16,92 +31,147 @@ editor: visual
 
 ```{r}
 library(tidyverse)
+library(reglin)
+library(car)
+library(broom)
+# adicionar mais aqui se necessário
 
+# Leitura dos dados originais:
 casas <- read.csv("dados/casas.csv")
 ```
 
 ## 1.2. Estrutura do banco de dados
 
 ```{r}
+# Visão geral
 glimpse(casas)
-
-dim(casas)
-
-names(casas)
-
-str(casas)
-
-head(casas)
-
-summary(casas)
 ```
 
-## 1.3. Verificação de valores ausentes
+O banco de dados tem 546 linhas e 12 colunas. As variáveis podem ser classificadas como:
+
+* **Variável resposta (`<dbl>`):** `preco` (preço de venda do imóvel, variável quantitativa contínua expressa em dólares canadenses).
+* **Covariável quantitativa contínua (`<dbl>`):** `area_lote` (área total do lote do imóvel, em $m^2$).
+* **Covariáveis quantitativas discretas (`<int>`):** `quartos`, `banheiros`, `andares` e `vagas_garagem`(contagem de cada item).
+* **Covariáveis qualitativas binárias (`<chr>`: "sim"/"não"):** `entrada_carro`, `area_recreacao`, `porao`, `aquecimento_gas`, `ar_condicionado` e `area_preferencial`(presença ou ausência do atributo).
+
+## 1.3. Verificação de valores ausentes e inconsistentes
 
 ```{r}
-# Total de valores ausentes
-sum(is.na(casas))
+# Total de valores ausentes por coluna
+colSums(is.na(casas))
 ```
+
+A base de dados está completa, sem NAs, logo, sem necessidade de procedimentos relacionados a valores ausentes.
+
+```{r}
+# Verificação de valores irreais
+casas %>%
+  summarise(
+    preco_nao_positivo = sum(preco <= 0),
+    area_nao_positiva = sum(area_lote <= 0),
+    quartos_negativos = sum(quartos < 0),
+    banheiros_negativos = sum(banheiros < 0),
+    andares_negativos = sum(andares < 0),
+    vagas_negativas = sum(vagas_garagem < 0)
+  )
+```
+
+Também não existem registros inconsistentes na base.
 
 ## 1.4. Verificação de duplicatas
 
 ```{r}
+# Total de linhas duplicadas
 sum(duplicated(casas))
+```
 
-which(duplicated(casas))
+Existe 1 linha idêntica a outra, então devemos investigar.
+
+```{r}
+# Identificação e exibição das observações duplicadas
+which(duplicated(casas) | duplicated(casas, fromLast = TRUE))
 
 casas[duplicated(casas) | duplicated(casas, fromLast = TRUE), ]
+```
 
-casas <- casas[-535, ]
+As linhas 318 e 535 são iguais. Optaremos, portanto, pela remoção da segunda ocorrência (linha 535), mantendo uma única linha, visto que a repetição em todas as variáveis, inclusive no preço, faria a mesma informação de 1 imóvel contar duas vezes. O impacto sobre as estimativas é pequeno, então a escolha não altera as conclusões.
+
+# Calcular depois certinho
+
+```{r}
+# Remove linha duplicada
+casas <- casas %>%
+  distinct()
+
+# Exibe nova dimensão da base de dados
+dim(casas)
 ```
 
 ## 1.5. Classificação e conversão das variáveis
 
-```{r}
-variaveis_categoricas <- c(
-  "entrada_carro",
-  "area_recreacao",
-  "porao",
-  "aquecimento_gas",
-  "ar_condicionado",
-  "area_preferencial"
-)
+### Variáveis quantitativas discretas
 
+Devemos decidir se as variáveis de contagem permanecerão como variáveis numéricas ou se devem ser convertidas para fatores. Para isso, analisamos a distribuição de frequências de seus valores.
+
+```{r}
+casas %>%
+  select(quartos, banheiros, andares, vagas_garagem) %>%
+  map(table)
+```
+
+A tabela apresenta que vários níveis mais extremos têm poucas casas. Decidimos, portanto, manter as variáveis como numéricas visto que níveis esparsos gerariam dummies instáveis.
+
+### Variáveis qualitativas
+
+Variáveis categóricas devem ser armazenadas como `factor` no R.
+
+```{r}
+# Conferência das variáveis categóricas
+casas %>%
+  select(where(is.character)) %>%
+  map(table)
+```
+
+Ao converter para fator, "não" é a categoria de referência (passada primeiro para a função, priorizando a ordem alfabética), assim, cada coeficiente do modelo é lido como o efeito de *ter* a característica em relação a *não ter*.
+
+```{r}
 casas <- casas %>%
   mutate(
     across(
-      all_of(variaveis_categoricas),
-      ~ factor(
-        trimws(tolower(.x)),
-        levels = c("não", "sim"),
-        labels = c("Não", "Sim")
-      )
+      c(entrada_carro, area_recreacao, porao, aquecimento_gas,
+        ar_condicionado, area_preferencial),
+      ~ factor(.x, levels = c("não", "sim"))
     )
   )
+
+# Conferência
+casas %>%
+  select(where(is.factor)) %>%
+  map(table)
 ```
 
 ## 1.6. Banco de dados tratado
 
+Agora conferimos a estrutura final da base de dados.
+
 ```{r}
-# Conferir tudo de novo
-str(casas)
+# Visão geral
+glimpse(casas)
 
-lapply(casas[variaveis_categoricas], levels)
+# Valores ausentes
+sum(is.na(casas))
 
-colSums(is.na(casas))
-
+# Duplicatas
 sum(duplicated(casas))
-
-summary(casas)
 ```
 
+A partir daqui, as demais seções usam o objeto `casas_tratado`: 545 casas, `preco` como resposta, 5 covariáveis quantitativas (`area_lote` contínua e as contagens) e 6 fatores sim/não com "não" como referência.
 
 ```{r}
-write.csv(casas,"casas_tratado.csv")
+casas_tratado <- casas
 
-saveRDS(
-  casas,("casas_tratado.rds")
-)
+write_csv(casas_tratado, "dados/casas_tratado.csv")
+saveRDS(casas_tratado, "dados/casas_tratado.rds")
 ```
 
 # 2. Análise descritiva
