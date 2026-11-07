@@ -49,10 +49,10 @@ glimpse(casas)
 
 O banco de dados tem 546 linhas e 12 colunas. As variáveis podem ser classificadas como:
 
-* **Variável resposta (`<dbl>`):** `preco` (preço de venda do imóvel, variável quantitativa contínua expressa em dólares canadenses).
-* **Covariável quantitativa contínua (`<dbl>`):** `area_lote` (área total do lote do imóvel, em $m^2$).
-* **Covariáveis quantitativas discretas (`<int>`):** `quartos`, `banheiros`, `andares` e `vagas_garagem`(contagem de cada item).
-* **Covariáveis qualitativas binárias (`<chr>`: "sim"/"não"):** `entrada_carro`, `area_recreacao`, `porao`, `aquecimento_gas`, `ar_condicionado` e `area_preferencial`(presença ou ausência do atributo).
+- **Variável resposta (`<dbl>`):** `preco` (preço de venda do imóvel, variável quantitativa contínua expressa em dólares canadenses).
+- **Covariável quantitativa contínua (`<dbl>`):** `area_lote` (área total do lote do imóvel, em $m^2$).
+- **Covariáveis quantitativas discretas (`<int>`):** `quartos`, `banheiros`, `andares` e `vagas_garagem`(contagem de cada item).
+- **Covariáveis qualitativas binárias (`<chr>`: "sim"/"não"):** `entrada_carro`, `area_recreacao`, `porao`, `aquecimento_gas`, `ar_condicionado` e `area_preferencial`(presença ou ausência do atributo).
 
 ## 1.3. Verificação de valores ausentes e inconsistentes
 
@@ -175,6 +175,246 @@ saveRDS(casas_tratado, "dados/casas_tratado.rds")
 ```
 
 # 2. Análise descritiva
+
+Nessa seção é realizada uma análise exploratória do conjunto de dados, com o objetivo de caracterizar os imóveis e investigar como seus preços se relacionam com diferentes características das propriedades. Inicialmente, são apresentadas estatísticas descritivas das variáveis. Em seguida, são analisadas a distribuição dos preços, as diferenças entre categorias de características dos imóveis e as associações entre as variáveis quantitativas, por meio de tabelas e representações gráficas.
+
+## 2.1. Resumo das variáveis
+
+Inicialmente foram calculadas estatísticas descritivas para caracterizar as variáveis presentes no conjunto de dados. As variáveis quantitativas foram resumidas por meio de medidas de tendência central, dispersão e posição, incluindo média, desvio padrão, mediana e quartis, além dos valores mínimo e máximo. Para as variáveis qualitativas, foram calculadas as frequências absolutas e relativas de cada categoria.
+
+Essa separação permite obter uma visão geral das características dos imóveis e compreender o comportamento das variáveis que serão utilizadas nas análises seguintes.
+
+```{r}
+variaveis_quantitativas <- casas_tratado %>%
+  summarise(
+    across(
+      where(is.numeric),
+      list(
+        n = ~sum(!is.na(.x)),
+        media = ~mean(.x, na.rm = TRUE),
+        dp = ~sd(.x, na.rm = TRUE),
+        mediana = ~median(.x, na.rm = TRUE),
+        q1 = ~quantile(.x, 0.25, na.rm = TRUE),
+        q3 = ~quantile(.x, 0.75, na.rm = TRUE),
+        min = ~min(.x, na.rm = TRUE),
+        max = ~max(.x, na.rm = TRUE)
+      )
+    )
+  ) %>%
+  pivot_longer(
+    cols = everything(),
+    names_to = c("Variável", ".value"),
+    names_pattern = "^(.*)_(n|media|dp|mediana|q1|q3|min|max)$"
+  ) %>%
+  mutate(
+    across(where(is.numeric), ~round(.x, 2))
+  )
+
+knitr::kable(
+  variaveis_quantitativas,
+  caption = "Estatísticas descritivas das variáveis quantitativas"
+)
+```
+
+```{r}
+variaveis_qualitativas <- casas_tratado %>%
+  select(where(is.factor)) %>%
+  pivot_longer(
+    cols = everything(),
+    names_to = "Variável",
+    values_to = "Categoria"
+  ) %>%
+  count(Variável, Categoria, .drop = FALSE) %>%
+  group_by(Variável) %>%
+  mutate(
+    Percentual = 100 * n / sum(n)
+  ) %>%
+  ungroup() %>%
+  select(
+    Variável,
+    Categoria,
+    Frequência = n,
+    Percentual
+  ) %>%
+  mutate(
+    Percentual = round(Percentual, 2)
+  )
+
+knitr::kable(
+  variaveis_qualitativas,
+  caption = "Distribuição de frequências das variáveis qualitativas",
+  col.names = c("Variável", "Categoria", "Frequência", "Percentual (%)")
+)
+```
+
+## 2.2. Distribuição dos preços dos imóveis 
+
+```{r}
+ggplot(casas_tratado, aes(x = preco)) +
+  geom_histogram(
+    bins = 30,
+    fill = "steelblue",
+    color = "white"
+  ) +
+  labs(
+    title = "Distribuição dos preços dos imóveis",
+    x = "Preço (dólares canadenses)",
+    y = "Frequência"
+  ) +
+  theme_minimal()
+```
+
+O histograma evidencia uma concentração de imóveis nas faixas de preço próximas a CAD 50.000. A maior frequência foi observada no intervalo imediatamente inferior a esse valor, com aproximadamente 68 imóveis. Nas duas faixas seguintes, acima de CAD 50.000, foram registradas frequências próximas de 55 e 56 imóveis, respectivamente. Isso indica uma distribuição relativamente concentrada nessa região de preços, embora exista uma dispersão considerável ao longo dos demais intervalos. Além disso, é possível ver que o histograma apresenta diversos valores atípicos superiores.
+
+```{r}
+ggplot(casas_tratado, aes(x = "", y = preco)) +
+  geom_boxplot(
+    fill = "steelblue",
+    color = "black"
+  ) +
+  labs(
+    title = "Boxplot dos preços dos imóveis",
+    x = NULL,
+    y = "Preço (dólares canadenses)"
+  ) +
+  theme_minimal()
+```
+
+O boxplot evidencia uma distribuição assimétrica à direita dos preços dos imóveis, com maior concentração de observações em valores mais baixos e presença de diversos valores atípicos superiores. A mediana está próxima de CAD 62.000, indicando que metade dos imóveis apresenta preços abaixo desse valor e metade acima. Também se observa uma dispersão considerável dos preços, sugerindo heterogeneidade entre os imóveis analisados.
+
+## 2.3. Comparação dos preços por características
+
+As características consideradas nessa análise são representadas por variáveis binárias, cujas categorias indicam a presença ou ausência da característica no imóvel. Dessa forma é possível comparar as distribuições dos preços entre imóveis que possuem ou não cada uma dessas características.
+
+### 2.3.1. Características da propriedade
+
+Aqui foram comparados os preços dos imóveis de acordo com diferentes características da propriedade. Para isso foram utilizados boxplots, permitindo visualizar diferenças nas medianas, na dispersão dos preços e na presença de possíveis valores atípicos entre as categorias de cada variável.
+
+```{r}
+caracteristicas_propriedade <- casas_tratado %>%
+  select(
+    preco,
+    entrada_carro,
+    area_recreacao,
+    porao,
+    aquecimento_gas,
+    ar_condicionado
+  ) %>%
+  pivot_longer(
+    cols = -preco,
+    names_to = "Variável",
+    values_to = "Categoria"
+  )
+
+ggplot(
+  caracteristicas_propriedade,
+  aes(x = Categoria, y = preco, fill = Categoria)
+) +
+  geom_boxplot() +
+  facet_wrap(~Variável) +
+  labs(
+    title = "Distribuição dos preços por características da propriedade",
+    x = "Categoria",
+    y = "Preço (dólares canadenses)"
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "none",
+    axis.text.x = element_text(angle = 0)
+  )
+```
+
+### 2.3.2. Características da localização 
+
+Aqui foram comparados os preços dos imóveis de acordo com sua localização em áreas preferenciais. Para isso foi utilizado um boxplot, permitindo visualizar a distribuição dos preços entre as duas categorias da variável.
+
+```{r}
+ggplot(
+  casas_tratado,
+  aes(x = area_preferencial, y = preco, fill = area_preferencial)
+) +
+  geom_boxplot() +
+  labs(
+    title = "Distribuição dos preços por localização",
+    x = "Área preferencial",
+    y = "Preço (dólares canadenses)"
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "none"
+  )
+```
+
+## 2.4. Correlação entre variáveis quantitativas
+
+Para investigar a relação linear entre as variáveis quantitativas do conjunto de dados foi calculada a matriz de correlação de Pearson. Os coeficientes obtidos permitem avaliar a direção e a intensidade das associações lineares entre os pares de variáveis, variando de -1 a 1. Os resultados foram representados graficamente por meio de um mapa de calor.
+
+```{r}
+matriz_correlacao <- casas_tratado %>%
+  select(where(is.numeric)) %>%
+  cor(method = "pearson", use = "complete.obs")
+
+round(matriz_correlacao, 2)
+```
+
+```{r}
+library(ggcorrplot)
+
+ggcorrplot(
+  matriz_correlacao,
+  method = "square",
+  type = "lower",
+  lab = TRUE,
+  lab_size = 3,
+  colors = c("#B2182B", "white", "#2166AC"),
+  title = "Matriz de correlação das variáveis quantitativas",
+  ggtheme = theme_minimal()
+)
+```
+
+A matriz de correlação evidencia associações positivas entre todas as variáveis quantitativas analisadas. Em relação ao preço dos imóveis, destacam-se as correlações com a área do lote (0,54) e o número de banheiros (0,52), indicando que essas características apresentam as associações lineares mais fortes com o valor de venda. As demais variáveis também apresentam correlações positivas com o preço, embora de menor intensidade, variando entre 0,37 e 0,42.
+
+Entre as variáveis explicativas, observam-se associações positivas de intensidade moderada entre quartos e andares (0,41), quartos e banheiros (0,37), área do lote e vagas de garagem (0,35), e banheiros e andares (0,33). Por outro lado, algumas relações apresentam correlações bastante baixas, como área do lote e andares (0,08) e andares e vagas de garagem (0,05).
+
+De modo geral os resultados indicam que a área do lote e o número de banheiros são as variáveis que apresentam maior associação linear com o preço dos imóveis, mas não implica causalidade e esses coeficientes não permitem, isoladamente, a determinar o efeito de cada característica sobre o preço.
+
+## 2.5. Relação entre preço e variáveis quantitativas
+
+Para complementar a análise de correlação foram construídos gráficos de dispersão relacionando o preço dos imóveis com cada uma das variáveis quantitativas. Além dos pontos correspondentes das observações, foram adicionadas linhas de tendência obtidas por regressão linear simples, permitindo visualizar a direção geral das associações entre as variáveis.
+
+```{r}
+variaveis_numericas <- casas_tratado %>%
+  select(preco, area_lote, quartos, banheiros, andares, vagas_garagem) %>%
+  pivot_longer(
+    cols = -preco,
+    names_to = "Variável",
+    values_to = "Valor"
+  )
+
+ggplot(
+  variaveis_numericas,
+  aes(x = Valor, y = preco)
+) +
+  geom_point(
+    alpha = 0.5,
+    color = "steelblue"
+  ) +
+  geom_smooth(
+    method = "lm",
+    se = TRUE,
+    color = "red"
+  ) +
+  facet_wrap(
+    ~Variável,
+    scales = "free_x"
+  ) +
+  labs(
+    title = "Relação entre preço e variáveis quantitativas",
+    x = "Valor da variável",
+    y = "Preço (dólares canadenses)"
+  ) +
+  theme_minimal()
+```
 
 # 3. Modelo inicial e diagnóstico
 
