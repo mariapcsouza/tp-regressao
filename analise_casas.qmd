@@ -247,7 +247,7 @@ knitr::kable(
 )
 ```
 
-## 2.2. Distribuição dos preços dos imóveis 
+## 2.2. Distribuição dos preços dos imóveis
 
 ```{r}
 ggplot(casas_tratado, aes(x = preco)) +
@@ -324,7 +324,7 @@ ggplot(
   )
 ```
 
-### 2.3.2. Características da localização 
+### 2.3.2. Características da localização
 
 Aqui foram comparados os preços dos imóveis de acordo com sua localização em áreas preferenciais. Para isso foi utilizado um boxplot, permitindo visualizar a distribuição dos preços entre as duas categorias da variável.
 
@@ -417,6 +417,155 @@ ggplot(
 ```
 
 # 3. Modelo inicial e diagnóstico
+
+## Modelo inicial
+
+```{r}
+library(tidyverse)
+library(car)
+library(lmtest)
+library(broom)
+
+casas_tratado <- readRDS("dados/casas_tratado.rds")
+```
+
+### Ajuste do modelo completo
+
+```{r}
+#| label: ajuste-inicial
+modelo_inicial <- lm(preco ~ ., data = casas_tratado)
+summary(modelo_inicial)
+```
+
+O modelo completo explica 67,3% da variabilidade do preço (R² = 0,673; R² ajustado = 0,666). O teste F global testa a hipótese de que todos os coeficientes, exceto o intercepto, são iguais a zero, e ela é rejeitada (F = 99,81 com 11 e 533 graus de liberdade; p \< 2,2e-16). Ou seja, pelo menos uma das covariáveis ajuda a explicar o preço.
+
+O erro padrão residual é de \$15.430 doláres canadenses, que é o tamanho típico do erro do modelo, bastante alto quando comparado à mediana dos preços (cerca de \$62.000). Pelos resíduos, o centro da distribuição é razoavelmente simétrico (1º quartil −9.405, mediana −663 e 3º quartil 7.366), mas os extremos não: o menor resíduo é −41.427 e o maior é 74.900. Isso indica que existem casas com preço muito acima do previsto, o que sugere assimetria à direita e vai ser investigado no diagnóstico.
+
+```{r}
+#| label: tabela-coef
+tidy(modelo_inicial, conf.int = TRUE) |>
+  mutate(across(where(is.numeric), ~ round(.x, 3))) |>
+  knitr::kable()
+```
+
+Os fatores têm "não" como categoria de referência, então cada coeficiente de variável binária é a diferença média de preço entre casas que têm a característica e casas que não têm, mantidas as demais variáveis constantes. Já nas quantitativas, é a diferença média associada ao aumento de uma unidade. Com 5% de significância, todas as covariáveis são significativas, exceto `quartos` (p = 0,080).
+
+- `area_lote`: cada m² a mais no lote está associado a um preço médio cerca de CAD 38 maior (IC 95%: 30,75 a 45,57).
+- `banheiros`: cada banheiro a mais está associado a cerca de CAD 14.370 a mais (IC 95%: 11.439 a 17.301), o maior efeito por unidade entre as quantitativas.
+- `andares`: cerca de CAD 6.530 por andar a mais; `vagas_garagem`: cerca de CAD 4.265 por vaga a mais.
+- `ar_condicionado`: casas com ar-condicionado central têm preço médio cerca de CAD 12.576 maior (IC 95%: 9.514 a 15.638).
+- `area_preferencial`: cerca de CAD 9.396 a mais em bairros de alta preferência.
+- `entrada_carro` (+CAD 6.665), `porao` (+CAD 5.457) e `area_recreacao` (+CAD 4.533). Esta última é significativa a 5%, mas não a 1% (p = 0,017), então é a evidência mais fraca entre as binárias.
+- `aquecimento_gas`: cerca de CAD 12.827 a mais, mas só 25 casas têm essa característica e o intervalo de confiança é bem largo (6.502 a 19.151), então a estimativa é pouco precisa.
+- `quartos`: cerca de CAD 1.835 por quarto, com intervalo de confiança que inclui o zero (−223 a 3.893). Possivelmente porque `quartos` é correlacionado com `banheiros` e `andares` (0,37 e 0,41), que já carregam parte da informação sobre o tamanho da casa.
+
+O intercepto (−CAD 4.044) não é significativo (p = 0,236) e não tem interpretação prática, já que não existe uma casa com lote de 0 m², sem quartos e sem banheiros.
+
+```{r}
+#| label: qualidade-ajuste
+glance(modelo_inicial) |>
+  select(r.squared, adj.r.squared, sigma, statistic, p.value, AIC, BIC) |>
+  knitr::kable(digits = 3)
+```
+
+O AIC (12072,69) e o BIC (12128,60) sozinhos não dizem muito sobre o modelo, mas servem de referência pra comparar com os modelos das próximas etapas, já que valores menores indicam melhor equilíbrio entre ajuste e número de parâmetros.
+
+```{r}
+#| label: anova-inicial
+anova(modelo_inicial)
+```
+
+A soma de quadrados de resíduos é de aproximadamente 1,27e11 (533 graus de liberdade), com quadrado médio de 2,38e8, cuja raiz é o erro padrão residual de CAD 15.430. A soma de quadrados explicada pelo modelo é de cerca de 2,61e11, que corresponde aos 67,3% do R².
+
+Essa tabela é **sequencial**: o efeito de cada variável é medido depois de descontar só as variáveis que aparecem antes dela na fórmula, então a ordem importa. Isso explica uma diferença importante em relação ao `summary`: `quartos` aparece como altamente significativo na ANOVA (F = 135,7), porque entra logo depois de `area_lote`, sem controlar por `banheiros` e `andares`; quando essas duas entram, ele deixa de ser significativo no teste t (p = 0,080). Já `area_lote`, por entrar primeiro, tem a maior soma de quadrados (cerca de 29% do total), o que reflete sua associação com o preço sozinha. Por isso, para julgar a importância de cada variável, usamos os testes t do `summary`, que condicionam em todas as outras.
+
+### Diagnóstico
+
+```{r}
+#| label: dados-diagnostico
+diag <- augment(modelo_inicial) |>
+  mutate(obs = row_number(),
+         res_stud = rstudent(modelo_inicial))
+```
+
+**Linearidade e variância constante**
+
+```{r}
+#| label: res-vs-ajustados
+#| fig-cap: "Resíduos studentizados vs valores ajustados"
+ggplot(diag, aes(.fitted, res_stud)) +
+  geom_point(alpha = .5) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_smooth(se = FALSE) +
+  labs(x = "Valores ajustados", y = "Resíduo studentizado")
+```
+
+Para que os pressupostos sejam atendidos, o gráfico de resíduos versus valores ajustados deve apresentar um padrão completamente aleatório e disperso em torno de zero. No entanto, o gráfico revela duas violações: há uma evidente tendência curvilínea na linha de suavização (indicando não linearidade) e o espalhamento dos resíduos aumenta conforme o preço ajustado cresce, formando um padrão de "funil". O teste de Breusch-Pagan ($p = 4.314e-09$) confirma estatisticamente a rejeição da hipótese nula de variância constante, atestando a heterocedasticidade.
+
+```{r}
+#| label: res-vs-preditoras
+#| fig-cap: "Resíduos vs preditoras numéricas"
+casas_tratado |>
+  mutate(res_stud = rstudent(modelo_inicial)) |>
+  pivot_longer(c(area_lote, quartos, banheiros, andares, vagas_garagem)) |>
+  ggplot(aes(value, res_stud)) +
+  geom_point(alpha = .4) +
+  geom_smooth(se = FALSE) +
+  facet_wrap(~ name, scales = "free_x") +
+  labs(x = NULL, y = "Resíduo studentizado")
+```
+
+```{r}
+#| label: bp
+bptest(modelo_inicial)
+```
+
+**Normalidade**
+
+```{r}
+#| label: qq
+#| fig-cap: "QQ-plot dos resíduos studentizados"
+qqPlot(modelo_inicial, id = FALSE)
+```
+
+Normalidade No gráfico QQ-plot, caso a normalidade fosse atendida, os pontos deveriam repousar sobre a reta teórica. Observa-se um forte desvio na cauda superior, refletindo casas com preços reais muito superiores ao previsto pelo modelo. O teste de Shapiro-Wilk ($p = 1.871e-11$) rejeita a hipótese nula, confirmando a não normalidade dos resíduos.
+
+```{r}
+#| label: shapiro
+shapiro.test(residuals(modelo_inicial))
+```
+
+**Independência**
+
+Como o banco de dados é composto por registros de diferentes casas em Windsor coletados no ano de 1987, trata-se de dados de corte transversal. Nesse tipo de estrutura, não há uma ordenação temporal, espacial ou sequencial natural entre as linhas que justifique a expectativa de autocorrelação. Portanto, o pressuposto de independência dos erros pode ser assumido pelo próprio desenho do estudo, sem a exigência de testes formais para erros autocorrelacionados.
+
+**Observações que chamam atenção**
+
+O filtro destacou casas que apresentam altos resíduos e alta influência no ajuste da reta. As observações 378, 93 e 363, por exemplo, possuem resíduos estudentizados absolutos bem acima do esperado e estão entre as maiores Distâncias de Cook, sugerindo que esses imóveis foram vendidos por valores muito diferentes do padrão capturado pelo modelo (possivelmente mansões ou vendas atípicas).
+
+```{r}
+#| label: influentes
+diag |>
+  filter(.cooksd > 4 / nrow(casas_tratado) | abs(res_stud) > 3) |>
+  select(obs, preco, res_stud, .hat, .cooksd) |>
+  arrange(desc(.cooksd)) |>
+  knitr::kable(digits = 3)
+```
+
+```{r}
+#| label: vif-rapido
+vif(modelo_inicial)
+```
+
+### Resumo dos problemas encontrados
+
+Multicolinearidade: O modelo está livre deste problema. O VIF de todas as covariáveis ficou próximo de 1, muito abaixo do limite crítico de 10 que indicaria dependência linear grave entre elas.
+
+Falhas Sistemáticas (Heterocedasticidade e Não-normalidade): Os resíduos não possuem variância constante e sofrem de forte assimetria na cauda superior, além de uma leve quebra de linearidade.
+
+Pontos Discrepantes/Influentes: Identificamos várias observações atípicas, com destaque para as linhas 378, 93 e 363 (altos resíduos e maiores alavancagens/Distâncias de Cook).
+
+Sugestão de Ação: A violação conjunta de linearidade, normalidade e variância (frequentemente causada pela métrica original das variáveis) sugere que você deve testar transformações estabilizadoras. Recomenda-se aplicar a transformação de Box-Cox na variável preco (como o logaritmo, comum em valores monetários) para corrigir as falhas sistemáticas antes de remover qualquer outlier.
 
 # 4. Problemas e correções
 
