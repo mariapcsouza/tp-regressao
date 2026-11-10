@@ -176,13 +176,11 @@ saveRDS(casas_tratado, "dados/casas_tratado.rds")
 
 # 2. Análise descritiva
 
-Nessa seção é realizada uma análise exploratória do conjunto de dados, com o objetivo de caracterizar os imóveis e investigar como seus preços se relacionam com diferentes características das propriedades. Inicialmente, são apresentadas estatísticas descritivas das variáveis. Em seguida, são analisadas a distribuição dos preços, as diferenças entre categorias de características dos imóveis e as associações entre as variáveis quantitativas, por meio de tabelas e representações gráficas.
+Nessa seção é realizada uma análise exploratória do conjunto de dados, com o objetivo de caracterizar os imóveis e investigar como seus preços variam com diferentes características das propriedades. Inicialmente são apresentadas estatísticas descritivas das variáveis. Em seguida são analisadas a distribuição dos preços, as diferenças entre categorias de características dos imóveis e as associações entre as variáveis quantitativas por meio de tabelas e representações gráficas.
 
 ## 2.1. Resumo das variáveis
 
-Inicialmente foram calculadas estatísticas descritivas para caracterizar as variáveis presentes no conjunto de dados. As variáveis quantitativas foram resumidas por meio de medidas de tendência central, dispersão e posição, incluindo média, desvio padrão, mediana e quartis, além dos valores mínimo e máximo. Para as variáveis qualitativas, foram calculadas as frequências absolutas e relativas de cada categoria.
-
-Essa separação permite obter uma visão geral das características dos imóveis e compreender o comportamento das variáveis que serão utilizadas nas análises seguintes.
+Inicialmente foram calculadas estatísticas descritivas para caracterizar as variáveis presentes no conjunto de dados. As variáveis quantitativas foram resumidas por meio de medidas de tendência central, dispersão e posição, como média, desvio padrão, mediana e quartis, valores mínimo e máximo. Para as variáveis qualitativas foram calculadas as frequências absolutas e relativas de cada categoria.
 
 ```{r}
 variaveis_quantitativas <- casas_tratado %>%
@@ -247,6 +245,8 @@ knitr::kable(
 )
 ```
 
+Essa separação permite obter uma visão geral das características dos imóveis e entender o comportamento das variáveis que vão ser utilizadas nas análises seguintes.
+
 ## 2.2. Distribuição dos preços dos imóveis
 
 ```{r}
@@ -264,7 +264,7 @@ ggplot(casas_tratado, aes(x = preco)) +
   theme_minimal()
 ```
 
-O histograma evidencia uma concentração de imóveis nas faixas de preço próximas a CAD 50.000. A maior frequência foi observada no intervalo imediatamente inferior a esse valor, com aproximadamente 68 imóveis. Nas duas faixas seguintes, acima de CAD 50.000, foram registradas frequências próximas de 55 e 56 imóveis, respectivamente. Isso indica uma distribuição relativamente concentrada nessa região de preços, embora exista uma dispersão considerável ao longo dos demais intervalos. Além disso, é possível ver que o histograma apresenta diversos valores atípicos superiores.
+O histograma evidencia uma concentração de imóveis nas faixas de preço próximas a CAD 50.000. A maior frequência foi observada no intervalo imediatamente inferior a esse valor, com quantidade acima de 65 imóveis. Nas duas faixas seguintes, acima de CAD 50.000, foram registradas frequências próximas de 55 imóveis. Isso indica uma distribuição relativamente concentrada nessa região de preços, embora exista uma dispersão considerável ao longo dos demais intervalos.
 
 ```{r}
 ggplot(casas_tratado, aes(x = "", y = preco)) +
@@ -280,15 +280,15 @@ ggplot(casas_tratado, aes(x = "", y = preco)) +
   theme_minimal()
 ```
 
-O boxplot evidencia uma distribuição assimétrica à direita dos preços dos imóveis, com maior concentração de observações em valores mais baixos e presença de diversos valores atípicos superiores. A mediana está próxima de CAD 62.000, indicando que metade dos imóveis apresenta preços abaixo desse valor e metade acima. Também se observa uma dispersão considerável dos preços, sugerindo heterogeneidade entre os imóveis analisados.
+O boxplot evidencia uma distribuição assimétrica à direita dos preços dos imóveis, com maior concentração de observações em valores mais baixos e presença de diversos outliers superiores. A mediana está próxima de CAD 62.000, o que indica que metade dos imóveis apresentam preços abaixo desse valor e metade está acima. Também se observa uma dispersão considerável dos preços, sugerindo heterogeneidade entre os imóveis analisados.
 
 ## 2.3. Comparação dos preços por características
 
-As características consideradas nessa análise são representadas por variáveis binárias, cujas categorias indicam a presença ou ausência da característica no imóvel. Dessa forma é possível comparar as distribuições dos preços entre imóveis que possuem ou não cada uma dessas características.
+As características consideradas nessa análise são representadas por variáveis binárias, nas quais as categorias indicam a presença (sim) ou ausência (não) da característica no imóvel. Dessa forma é possível comparar as distribuições dos preços entre imóveis que possuem ou não cada uma dessas características.
 
 ### 2.3.1. Características da propriedade
 
-Aqui foram comparados os preços dos imóveis de acordo com diferentes características da propriedade. Para isso foram utilizados boxplots, permitindo visualizar diferenças nas medianas, na dispersão dos preços e na presença de possíveis valores atípicos entre as categorias de cada variável.
+Aqui foram comparados os preços dos imóveis de acordo com diferentes características da propriedade. Para isso foram utilizados boxplots, permitindo visualizar diferenças nas medianas, na dispersão dos preços e na presença de possíveis outliers entre as categorias de cada variável.
 
 ```{r}
 caracteristicas_propriedade <- casas_tratado %>%
@@ -324,6 +324,20 @@ ggplot(
   )
 ```
 
+- **Aquecimento a gás:** imóveis com aquecimento a gás apresentam preços medianos superiores aos imóveis sem essa característica.
+
+- **Ar-condicionado:** observa-se uma diferença expressiva entre as categorias, com preços medianos mais elevados para imóveis que possuem ar-condicionado.
+
+- **Área de recreação:** imóveis com área de recreação apresentam preços medianos superiores aos que não possuem essa característica.
+
+- **Entrada para carro:** imóveis com entrada para carro apresentam preços medianos consideravelmente mais elevados em comparação aos imóveis sem essa característica.
+
+- **Porão:** imóveis que possuem porão apresentam preços medianos superiores aos que não possuem, embora as distribuições apresentem bastante sobreposição.
+
+De modo geral é possível observar que os imóveis que possuem as características analisadas apresentam preços medianos superiores aos daqueles que não possuem.
+
+Apesar dessas diferenças, os boxplots evidenciam uma dispersão considerável dos preços dentro de cada categoria, além da presença de outliers superiores. Isso demonstra que as características analisadas estão associadas a diferenças nos preços dos imóveis, mas não são suficientes de forma isolada para explicar toda a variação observada nos valores de venda.
+
 ### 2.3.2. Características da localização
 
 Aqui foram comparados os preços dos imóveis de acordo com sua localização em áreas preferenciais. Para isso foi utilizado um boxplot, permitindo visualizar a distribuição dos preços entre as duas categorias da variável.
@@ -344,6 +358,8 @@ ggplot(
     legend.position = "none"
   )
 ```
+
+Pode-se observar que os imóveis localizados em áreas preferenciais apresentam preços medianos consideravelmente superiores aos situados em áreas não preferenciais, com valores próximos a CAD 80.000 e CAD 60.000, respectivamente. Além disso ambas as categorias apresentam dispersão considerável dos preços e outliers superiores. Apesar dessa diferença, existe sobreposição entre as distribuições, indicando que outros fatores além da localização também influenciam os preços de venda dos imóveis.
 
 ## 2.4. Correlação entre variáveis quantitativas
 
@@ -415,6 +431,16 @@ ggplot(
   ) +
   theme_minimal()
 ```
+
+- **Andares:** observa-se uma tendência positiva, indicando que imóveis com maior número de andares tendem a apresentar preços mais elevados. No entanto, a dispersão dos pontos é considerável.
+
+- **Área do lote:** apresenta uma associação positiva relativamente evidente. No geral imóveis com terrenos maiores tendem a apresentar preços de venda mais elevados.
+
+- **Banheiros:** observa-se uma tendência positiva, com preços geralmente maiores para imóveis com mais banheiros. Essa variável apresenta uma das associações positivas mais expressivas com o preço.
+
+- **Quartos:** também apresenta uma tendência positiva, indicando que imóveis com maior número de quartos tendem a apresentar preços mais elevados. No entanto, existe bastante variação nos preços entre imóveis com a mesma quantidade de quartos.
+
+- **Vagas de garagem:** observa-se uma tendência positiva, indicando que imóveis com mais vagas de garagem tendem a apresentar preços superiores. Apesar disso, há uma dispersão considerável dos valores.
 
 # 3. Modelo inicial e diagnóstico
 
