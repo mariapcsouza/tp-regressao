@@ -747,6 +747,204 @@ relação entre dados e modelo, não uma prova de erro. Primeiro avaliamos
 transformações; depois verificamos se as conclusões dependem das casas
 mais influentes no modelo transformado.
 
+## 4.3. Transformações e comparação antes/depois
+
+### Escolha das escalas
+
+Como os preços são positivos e o espalhamento dos resíduos cresce com os
+valores ajustados, investigamos a transformação de Box-Cox da resposta:
+$(y^\lambda-1)/\lambda$ para $\lambda\ne0$ e $\log(y)$ para $\lambda=0$.
+O perfil abaixo mantém todas as covariáveis e todas as casas. O intervalo
+de 95% é aproximado pela razão de verossimilhanças em uma grade de valores.
+
+```{r}
+#| label: davi-boxcox
+#| fig-cap: "Perfil de Box-Cox do preço, condicionado às covariáveis do modelo inicial."
+boxcox_davi <- MASS::boxcox(
+  modelo_inicial, lambda = seq(-0.5, 1, by = 0.01), plotit = FALSE
+)
+lambda_davi <- boxcox_davi$x[which.max(boxcox_davi$y)]
+corte_bc_davi <- max(boxcox_davi$y) - qchisq(0.95, df = 1) / 2
+ic_lambda_davi <- range(boxcox_davi$x[boxcox_davi$y >= corte_bc_davi])
+
+plot(boxcox_davi$x, boxcox_davi$y, type = "l",
+     xlab = expression(lambda), ylab = "Log-verossimilhança perfilada")
+abline(h = corte_bc_davi, lty = 2, col = "firebrick")
+abline(v = c(0, lambda_davi), lty = c(3, 2), col = c("steelblue", "black"))
+legend("bottomleft", c("Logaritmo (lambda = 0)", "Máximo", "Corte de 95%"),
+       lty = c(3, 2, 2), col = c("steelblue", "black", "firebrick"), bty = "n")
+```
+
+O máximo ocorre em $\lambda=$ `r round(lambda_davi, 2)`, com intervalo
+aproximado [`r round(ic_lambda_davi[1], 2)`;
+`r round(ic_lambda_davi[2], 2)`]. O intervalo inclui zero e exclui 1,
+apoiando o logaritmo como uma transformação simples e interpretável. Isso
+não garante que todos os pressupostos sejam atendidos após a transformação.
+
+Comparamos três especificações completas: preço na escala original (M0),
+logaritmo natural do preço (M1) e logaritmos do preço e da área do lote (M2).
+Em M2, a relação com a área admite retornos proporcionais: um mesmo aumento
+absoluto do lote pode ter associação diferente com o preço em lotes pequenos
+e grandes. As demais covariáveis permanecem iguais.
+
+```{r}
+#| label: davi-modelos-transformados
+stopifnot(all(casas_tratado$preco > 0), all(casas_tratado$area_lote > 0))
+modelo_log_preco <- update(modelo_inicial, log(preco) ~ .)
+modelo_log_preco_area <- update(
+  modelo_log_preco, . ~ . - area_lote + log(area_lote)
+)
+modelos_davi <- list(
+  M0 = modelo_inicial, M1 = modelo_log_preco, M2 = modelo_log_preco_area
+)
+```
+
+### Diagnósticos após as transformações
+
+Repetimos os testes de Breusch-Pagan (versão studentizada de `bptest`) e
+Shapiro-Wilk, juntamente com os diagnósticos de influência. Os testes são
+complementos dos gráficos; um p-valor maior não demonstra que um pressuposto
+seja verdadeiro. A alavancagem de M1 é idêntica à de M0 porque depende apenas
+da matriz de covariáveis; em M2, essa matriz muda.
+
+```{r}
+#| label: davi-comparacao-diagnosticos
+comparacao_diagnosticos_davi <- purrr::imap_dfr(modelos_davi, function(m, nome) {
+  infl <- diagnosticar_davi(m)
+  tibble(
+    modelo = nome,
+    p_BP = lmtest::bptest(m)$p.value,
+    p_Shapiro = shapiro.test(residuals(m))$p.value,
+    residuos_altos = sum(infl$residuo_alto),
+    alavancagens_altas = sum(infl$alavancagem_alta),
+    Cook_alto = sum(infl$cook_alto),
+    DFFITS_alto = sum(infl$dffits_alto)
+  )
+})
+comparacao_diagnosticos_davi |>
+  mutate(across(starts_with("p_"), ~ format.pval(.x, digits = 3, eps = 1e-16))) |>
+  knitr::kable(caption = "Diagnósticos nas três especificações completas")
+
+residuos_modelos_davi <- purrr::imap_dfr(modelos_davi, function(m, nome) {
+  tibble(modelo = nome, ajustado = fitted(m), res_student = rstudent(m),
+         area_lote = casas_tratado$area_lote)
+})
+```
+
+```{r}
+#| label: davi-residuos-transformados
+#| fig-width: 10
+#| fig-height: 4
+#| fig-cap: "Resíduos studentizados versus ajustados; M0 em CAD, M1 e M2 em log(CAD)."
+ggplot(residuos_modelos_davi, aes(ajustado, res_student)) +
+  geom_point(alpha = 0.4, size = 1) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_smooth(method = "loess", formula = y ~ x, se = FALSE) +
+  facet_wrap(~ modelo, scales = "free_x") +
+  labs(x = "Valor ajustado na escala da resposta", y = "Resíduo studentizado") +
+  theme_minimal()
+```
+
+```{r}
+#| label: davi-qq-transformados
+#| fig-width: 10
+#| fig-height: 4
+#| fig-cap: "Comparação dos gráficos quantil-quantil dos resíduos studentizados."
+ggplot(residuos_modelos_davi, aes(sample = res_student)) +
+  stat_qq(alpha = 0.5, size = 1) +
+  stat_qq_line(color = "firebrick") +
+  facet_wrap(~ modelo) +
+  labs(x = "Quantil teórico normal", y = "Quantil observado") +
+  theme_minimal()
+```
+
+```{r}
+#| label: davi-residuos-area
+#| fig-width: 10
+#| fig-height: 4
+#| fig-cap: "Resíduos versus área do lote, para avaliar o padrão associado a essa covariável."
+ggplot(residuos_modelos_davi, aes(area_lote, res_student)) +
+  geom_point(alpha = 0.4, size = 1) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_smooth(method = "loess", formula = y ~ x, se = FALSE) +
+  facet_wrap(~ modelo) +
+  labs(x = "Área do lote (m²)", y = "Resíduo studentizado") +
+  theme_minimal()
+```
+
+As transformações reduzem os desvios na cauda superior e a quantidade de
+casas sinalizadas por Cook (de
+`r comparacao_diagnosticos_davi$Cook_alto[1]` em M0 para
+`r comparacao_diagnosticos_davi$Cook_alto[3]` em M2). Entretanto, o
+Shapiro-Wilk ainda rejeita a normalidade a 5% em M2
+(p = `r signif(comparacao_diagnosticos_davi$p_Shapiro[3], 3)`). Portanto,
+a transformação melhora o comportamento dos resíduos, mas não constitui
+uma correção completa. O Breusch-Pagan também permanece significativo a 5%
+em M1 (p = `r signif(comparacao_diagnosticos_davi$p_BP[2], 3)`) e M2
+(p = `r signif(comparacao_diagnosticos_davi$p_BP[3], 3)`). Há, portanto,
+evidência remanescente de heterocedasticidade, que deve ser considerada na
+inferência e na validação do modelo final.
+
+### Comparação do ajuste na mesma escala
+
+Não comparamos diretamente os $R^2$, erros padrão residuais ou AICs brutos
+de respostas em escalas diferentes. Para expressar a verossimilhança de M1
+e M2 na escala do preço, incluímos o jacobiano da transformação:
+$\ell_y=\ell_{\log y}-\sum_i\log(y_i)$. Assim, somamos
+$2\sum_i\log(y_i)$ ao AIC e ao BIC desses modelos. Essa comparação pressupõe
+os respectivos modelos gaussianos e usa exatamente as mesmas observações.
+
+```{r}
+#| label: davi-criterios-mesma-escala
+criterios_davi <- purrr::imap_dfr(modelos_davi, function(m, nome) {
+  jacobiano <- if (nome == "M0") 0 else 2 * sum(log(casas_tratado$preco))
+  tibble(modelo = nome, AIC_preco = AIC(m) + jacobiano,
+         BIC_preco = BIC(m) + jacobiano)
+})
+knitr::kable(criterios_davi, digits = 2,
+             caption = "Critérios de informação na escala original do preço")
+```
+
+Complementamos com validação cruzada em 10 partes, usando as mesmas partições
+nos três modelos. Cada casa é prevista por um ajuste que não a utilizou.
+Nos modelos logarítmicos, usamos
+$\widehat{y}=\exp(\widehat{\log y})\,\overline{\exp(e)}$, com o fator de
+retransformação (*smearing*) calculado somente nos dados de treinamento.
+Esse fator global aproxima a média na escala original, mas pode ser
+insuficiente se a distribuição dos erros variar com as covariáveis.
+
+```{r}
+#| label: davi-validacao-cruzada
+set.seed(20261112)
+partes_davi <- sample(rep(seq_len(10), length.out = n_davi))
+comparacao_cv_davi <- purrr::imap_dfr(modelos_davi, function(m, nome) {
+  previsao <- rep(NA_real_, n_davi)
+  for (k in seq_len(10)) {
+    treino <- casas_tratado[partes_davi != k, , drop = FALSE]
+    teste <- casas_tratado[partes_davi == k, , drop = FALSE]
+    ajuste <- lm(formula(m), data = treino)
+    estimativa <- predict(ajuste, newdata = teste)
+    if (nome != "M0") {
+      estimativa <- exp(estimativa) * mean(exp(residuals(ajuste)))
+    }
+    previsao[partes_davi == k] <- estimativa
+  }
+  stopifnot(all(is.finite(previsao)))
+  erro <- casas_tratado$preco - previsao
+  tibble(modelo = nome, RMSE_CAD = sqrt(mean(erro^2)), MAE_CAD = mean(abs(erro)))
+})
+knitr::kable(comparacao_cv_davi, digits = 2,
+             caption = "Erros de validação cruzada na escala do preço (CAD)")
+```
+
+M2 apresenta menor AIC e BIC corrigidos. Na validação cruzada, seu RMSE é
+CAD `r round(comparacao_cv_davi$RMSE_CAD[3], 2)`, frente a CAD
+`r round(comparacao_cv_davi$RMSE_CAD[1], 2)` em M0. O MAE informa o erro
+absoluto médio e é menos sensível a erros extremos do que o RMSE.
+Esta é uma comparação exploratória com uma partição aleatória; não fornece
+incerteza sobre a diferença entre modelos nem substitui a validação da
+seleção que será feita na seção 5.
+
 # 5. Seleção e modelo final
 
 # 6. Conclusão
