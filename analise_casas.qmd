@@ -945,6 +945,143 @@ Esta é uma comparação exploratória com uma partição aleatória; não forne
 incerteza sobre a diferença entre modelos nem substitui a validação da
 seleção que será feita na seção 5.
 
+## 4.4. Inferência robusta e sensibilidade às casas influentes
+
+### Erros padrão robustos à heterocedasticidade
+
+Como M2 ainda apresenta evidência de variância não constante, calculamos
+erros padrão HC3, que ajustam a matriz de covariância levando em conta os
+resíduos e a alavancagem. Os coeficientes e valores ajustados permanecem
+iguais. Os intervalos e testes abaixo usam a distribuição t com os graus de
+liberdade residuais como aproximação; HC3 não corrige a forma da média,
+não torna os resíduos normais e não elimina eventual dependência entre casas.
+
+```{r}
+#| label: davi-inferencia-hc3
+cov_hc3_davi <- car::hccm(modelo_log_preco_area, type = "hc3")
+ep_hc3_davi <- sqrt(diag(cov_hc3_davi))
+gl_davi <- df.residual(modelo_log_preco_area)
+tabela_hc3_davi <- tibble(
+  termo = names(coef(modelo_log_preco_area)),
+  estimativa = unname(coef(modelo_log_preco_area)),
+  EP_classico = unname(sqrt(diag(vcov(modelo_log_preco_area)))),
+  EP_HC3 = unname(ep_hc3_davi)
+) |>
+  mutate(
+    IC95_inf = estimativa - qt(0.975, gl_davi) * EP_HC3,
+    IC95_sup = estimativa + qt(0.975, gl_davi) * EP_HC3,
+    p_HC3 = 2 * pt(-abs(estimativa / EP_HC3), df = gl_davi)
+  )
+tabela_hc3_davi |>
+  mutate(p_HC3 = format.pval(p_HC3, digits = 3, eps = 1e-16)) |>
+  knitr::kable(digits = 4,
+               caption = "Coeficientes de M2 e inferência HC3 na escala logarítmica")
+```
+
+### Reajuste apenas para avaliar sensibilidade
+
+Recalculamos a influência em M2 e retiramos, **somente em um ajuste de
+sensibilidade**, as casas que ultrapassam o corte de Cook ou de DFFITS.
+Essa retirada conjunta é uma perturbação exploratória da amostra: os mesmos
+dados foram usados para identificar e retirar os casos. Por isso, não
+interpretamos um eventual ajuste melhor como justificativa para eliminá-los,
+nem comparamos AICs de amostras diferentes.
+
+```{r}
+#| label: davi-sensibilidade
+influencia_m2_davi <- bind_cols(id_casas_davi, diagnosticar_davi(modelo_log_preco_area))
+retirar_davi <- influencia_m2_davi$cook_alto | influencia_m2_davi$dffits_alto
+modelo_sensibilidade_davi <- update(
+  modelo_log_preco_area, data = casas_tratado[!retirar_davi, , drop = FALSE]
+)
+
+influencia_m2_davi |>
+  filter(retirar_davi) |>
+  arrange(desc(cook)) |>
+  slice_head(n = 10) |>
+  select(obs_tratada, linha_original, res_student, alavancagem, cook, dffits) |>
+  knitr::kable(digits = 3, caption = "Dez maiores distâncias de Cook em M2")
+
+sensibilidade_coef_davi <- tibble(
+  termo = names(coef(modelo_log_preco_area)),
+  beta_completo = unname(coef(modelo_log_preco_area)),
+  beta_sensibilidade = unname(coef(modelo_sensibilidade_davi))
+) |>
+  mutate(
+    diferenca = beta_sensibilidade - beta_completo,
+    diferenca_em_EP_HC3 = diferenca / unname(ep_hc3_davi),
+    mudou_sinal = sign(beta_completo) != sign(beta_sensibilidade)
+  )
+knitr::kable(sensibilidade_coef_davi, digits = 4,
+             caption = "Mudanças dos coeficientes de M2 no ajuste de sensibilidade")
+```
+
+Foram retiradas `r sum(retirar_davi)` casas neste exercício, restando
+`r nobs(modelo_sensibilidade_davi)` observações. As linhas originais
+sinalizadas são: `r paste(influencia_m2_davi$linha_original[retirar_davi], collapse = ", ")`.
+As diferenças da tabela são expressas também em unidades do erro padrão
+robusto do ajuste completo, permitindo comparar coeficientes de escalas
+distintas; essa razão não é um teste de hipótese.
+
+```{r}
+#| label: davi-resumo-sensibilidade
+sensibilidade_covariaveis_davi <- sensibilidade_coef_davi |>
+  filter(termo != "(Intercept)") |>
+  arrange(desc(abs(diferenca_em_EP_HC3)))
+
+predizer_preco_davi <- function(modelo, novos_dados) {
+  exp(predict(modelo, newdata = novos_dados)) * mean(exp(residuals(modelo)))
+}
+previsao_completa_davi <- predizer_preco_davi(modelo_log_preco_area, casas_tratado)
+previsao_sensibilidade_davi <- predizer_preco_davi(modelo_sensibilidade_davi, casas_tratado)
+mudanca_previsao_davi <- 100 * abs(
+  previsao_sensibilidade_davi / previsao_completa_davi - 1
+)
+```
+
+Entre as covariáveis, `r sum(sensibilidade_covariaveis_davi$mudou_sinal)`
+coeficientes mudam de sinal. A maior mudança padronizada ocorre em
+`r sensibilidade_covariaveis_davi$termo[1]`, com magnitude de
+`r round(abs(sensibilidade_covariaveis_davi$diferenca_em_EP_HC3[1]), 2)`
+erros padrão HC3. Para as mesmas 545 casas, a mudança absoluta relativa das
+previsões tem mediana de `r round(median(mudanca_previsao_davi), 2)`% e
+percentil 95 de `r round(unname(quantile(mudanca_previsao_davi, 0.95)), 2)`%.
+Essa comparação descreve estabilidade entre ajustes; não mede erro de
+previsão fora da amostra. A manutenção dos sinais não implica que as
+magnitudes sejam insensíveis às casas sinalizadas.
+
+## 4.5. Encaminhamento para a seleção do modelo
+
+Não encontramos multicolinearidade acentuada no modelo inicial. As
+transformações melhoraram os diagnósticos e o desempenho preditivo nesta
+comparação, mas permaneceram desvios de normalidade e evidência de
+heterocedasticidade. Assim, recomendamos **M2 com todas as 545 casas como
+modelo completo candidato** para a próxima etapa, mantendo os erros padrão
+HC3 como referência complementar para a inferência. A análise de
+sensibilidade não substitui esse ajuste.
+
+```{r}
+#| label: davi-modelo-candidato
+modelo_candidato_davi <- modelo_log_preco_area
+vif_m2_davi <- car::vif(modelo_candidato_davi)
+```
+
+O VIF máximo de M2 é `r round(max(vif_m2_davi), 2)`, ainda abaixo de 5.
+Na seção 5, será necessário selecionar variáveis, repetir os diagnósticos
+no modelo selecionado e avaliar a estabilidade das conclusões. Os efeitos
+de M2 são multiplicativos: para uma covariável não transformada, uma unidade
+se associa a uma variação de $100[\exp(\beta)-1]$% na média geométrica
+condicional do preço, mantendo as demais constantes; para os fatores,
+compara-se "sim" a "não". O coeficiente de $\log(\text{area_lote})$ é uma
+elasticidade. A interpretação da média aritmética em CAD requer considerar
+também a retransformação, especialmente sob heterocedasticidade.
+
+Por fim, nenhuma transformação ou cálculo de HC3 demonstra independência
+dos erros. O banco não contém localização detalhada ou ordem temporal que
+permita investigar dependência espacial ou temporal adequadamente. Esse
+pressuposto permanece uma limitação, e as associações estimadas não devem
+ser interpretadas como efeitos causais.
+
 # 5. Seleção e modelo final
 
 # 6. Conclusão
