@@ -31,7 +31,6 @@ editor: visual
 
 ```{r}
 library(tidyverse)
-library(reglin)
 library(car)
 library(broom)
 # adicionar mais aqui se necessário
@@ -872,6 +871,10 @@ ggplot(residuos_modelos_davi, aes(area_lote, res_student)) +
   theme_minimal()
 ```
 
+Nos gráficos de resíduos versus ajustados, a curvatura observada em M0
+fica menos evidente em M1 e M2. Em relação à área, ainda há oscilações nas
+extremidades, onde existem poucas casas; não interpretamos a suavização
+nessas regiões como prova de que a forma funcional esteja resolvida.
 As transformações reduzem os desvios na cauda superior e a quantidade de
 casas sinalizadas por Cook (de
 `r comparacao_diagnosticos_davi$Cook_alto[1]` em M0 para
@@ -977,6 +980,13 @@ tabela_hc3_davi |>
   knitr::kable(digits = 4,
                caption = "Coeficientes de M2 e inferência HC3 na escala logarítmica")
 ```
+
+Em M2, os intervalos HC3 das covariáveis permanecem inteiramente positivos
+a 95%. Em particular, `quartos` apresenta p-valor robusto de
+`r signif(tabela_hc3_davi$p_HC3[tabela_hc3_davi$termo == "quartos"], 3)`,
+diferentemente do resultado no modelo original. Isso mostra que a evidência
+sobre uma covariável depende também da especificação da relação com o preço;
+não seria adequado eliminá-la apenas pelo teste t de M0.
 
 ### Reajuste apenas para avaliar sensibilidade
 
