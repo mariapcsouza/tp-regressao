@@ -653,6 +653,100 @@ n_davi <- nobs(modelo_inicial)
 p_davi <- modelo_inicial$rank # Inclui o intercepto.
 ```
 
+## 4.2. Resíduos atípicos, alavancagem e influência
+
+Um resíduo studentizado externamente elevado indica um preço pouco
+compatível com as características observadas. A alavancagem identifica
+combinações incomuns de covariáveis, independentemente do preço. Já Cook e
+DFFITS avaliam quanto a retirada de uma casa altera o ajuste. Portanto, uma
+casa pode ter alto resíduo sem apresentar alta alavancagem.
+
+Adotamos $|t_i|>3$, $h_{ii}>2p/n$, $D_i>4/n$ e
+$|\mathrm{DFFITS}_i|>2\sqrt{p/n}$ como critérios exploratórios, com
+$n=545$ e $p=12$ (incluindo o intercepto). Como investigamos muitas casas,
+esses cortes não devem ser interpretados como testes simultâneos a 5%.
+
+```{r}
+#| label: davi-influencia
+diagnosticar_davi <- function(modelo) {
+  n <- nobs(modelo)
+  p <- modelo$rank
+  tibble(
+    res_student = unname(rstudent(modelo)),
+    alavancagem = unname(hatvalues(modelo)),
+    cook = unname(cooks.distance(modelo)),
+    dffits = unname(dffits(modelo))
+  ) |>
+    mutate(
+      residuo_alto = abs(res_student) > 3,
+      alavancagem_alta = alavancagem > 2 * p / n,
+      cook_alto = cook > 4 / n,
+      dffits_alto = abs(dffits) > 2 * sqrt(p / n),
+      investigar = residuo_alto | alavancagem_alta | cook_alto | dffits_alto
+    )
+}
+
+influencia_inicial_davi <- bind_cols(
+  id_casas_davi, preco = casas_tratado$preco,
+  diagnosticar_davi(modelo_inicial)
+)
+
+limites_davi <- tibble(
+  criterio = c("|Resíduo studentizado|", "Alavancagem", "Cook", "|DFFITS|"),
+  limite = c(3, 2 * p_davi / n_davi, 4 / n_davi, 2 * sqrt(p_davi / n_davi)),
+  casas_sinalizadas = c(
+    sum(influencia_inicial_davi$residuo_alto),
+    sum(influencia_inicial_davi$alavancagem_alta),
+    sum(influencia_inicial_davi$cook_alto),
+    sum(influencia_inicial_davi$dffits_alto)
+  )
+)
+knitr::kable(limites_davi, digits = 4,
+             caption = "Limites de triagem e contagens no modelo inicial")
+
+influencia_inicial_davi |>
+  arrange(desc(cook)) |>
+  slice_head(n = 10) |>
+  select(obs_tratada, linha_original, preco, res_student, alavancagem, cook, dffits) |>
+  knitr::kable(digits = 3, caption = "Dez casas com maior distância de Cook")
+```
+
+Ao todo, `r sum(influencia_inicial_davi$investigar)` casas atendem a pelo
+menos um critério; as contagens da tabela se sobrepõem. Há
+`r sum(influencia_inicial_davi$residuo_alto)` resíduos com módulo superior a
+3 e `r sum(influencia_inicial_davi$cook_alto)` distâncias de Cook acima de
+$4/n$. Nenhuma distância de Cook ultrapassa 1, mas isso não elimina a
+necessidade de avaliar sensibilidade.
+
+As observações tratadas 103, 363 e 93 têm as maiores distâncias de Cook.
+A observação 378 apresenta o maior resíduo studentizado positivo, mas sua
+alavancagem é inferior ao corte. Logo, não se deve atribuir alta alavancagem
+a todas as casas com resíduos elevados. Os dados disponíveis também não
+permitem afirmar que sejam mansões, erros de registro ou vendas irregulares.
+
+```{r}
+#| label: davi-grafico-influencia
+#| fig-width: 9
+#| fig-height: 7
+#| fig-cap: "Diagnósticos do modelo inicial; linhas tracejadas indicam os cortes de triagem."
+influencia_inicial_davi |>
+  transmute(obs_tratada, `|Resíduo studentizado|` = abs(res_student),
+            Alavancagem = alavancagem, Cook = cook, `|DFFITS|` = abs(dffits)) |>
+  pivot_longer(-obs_tratada, names_to = "criterio", values_to = "valor") |>
+  ggplot(aes(obs_tratada, valor)) +
+  geom_point(alpha = 0.55, size = 1) +
+  geom_hline(data = limites_davi, aes(yintercept = limite),
+             color = "firebrick", linetype = "dashed") +
+  facet_wrap(~ criterio, scales = "free_y") +
+  labs(x = "Observação na base tratada", y = "Valor do diagnóstico") +
+  theme_minimal()
+```
+
+Mantemos todas as observações nesta etapa: influência é uma propriedade da
+relação entre dados e modelo, não uma prova de erro. Primeiro avaliamos
+transformações; depois verificamos se as conclusões dependem das casas
+mais influentes no modelo transformado.
+
 # 5. Seleção e modelo final
 
 # 6. Conclusão
