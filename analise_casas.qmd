@@ -595,6 +595,64 @@ Sugestão de Ação: A violação conjunta de linearidade, normalidade e variân
 
 # 4. Problemas e correções
 
+Nesta seção, aprofundamos os problemas identificados no modelo completo e
+avaliamos correções sem selecionar variáveis, tarefa reservada à seção 5.
+Usamos as mesmas 545 casas e mantemos as contagens como numéricas. Os limites
+dos diagnósticos servem para investigação, não como regras de exclusão.
+
+## 4.1. Multicolinearidade e identificação das observações
+
+O fator de inflação da variância (VIF) mede quanto a variância de um
+coeficiente aumenta pela associação linear entre sua covariável e as demais.
+Valores acima de 5 merecem atenção e acima de 10 sugerem um problema mais
+acentuado; esses valores são referências práticas, não testes de hipótese.
+Como todos os termos têm um grau de liberdade, usamos o VIF usual, inclusive
+para os fatores binários.
+
+```{r}
+#| label: davi-vif
+tabela_vif <- tibble(
+  variavel = names(car::vif(modelo_inicial)),
+  VIF = unname(car::vif(modelo_inicial))
+) |>
+  mutate(tolerancia = 1 / VIF) |>
+  arrange(desc(VIF))
+
+knitr::kable(tabela_vif, digits = 3,
+             caption = "VIF e tolerância no modelo completo")
+```
+
+O maior VIF foi `r round(max(tabela_vif$VIF), 2)`, para
+`r tabela_vif$variavel[1]`. Assim, não há evidência de multicolinearidade
+acentuada que justifique retirar covariáveis. Isso não significa ausência
+de associação entre elas, nem permite concluir que uma variável com teste t
+não significativo seja dispensável. A seleção será discutida posteriormente.
+
+Para rastrear as casas sinalizadas, distinguimos a posição na base tratada
+da linha original do banco. A linha original abaixo conta os registros a
+partir de 1, sem o cabeçalho do CSV. O identificador fica separado dos dados
+usados na regressão, evitando sua inclusão acidental como preditor em `~ .`.
+
+```{r}
+#| label: davi-identificacao
+dados_originais_davi <- read.csv("dados/casas.csv", encoding = "UTF-8")
+linhas_mantidas_davi <- which(!duplicated(dados_originais_davi))
+stopifnot(
+  nrow(casas_tratado) == length(linhas_mantidas_davi),
+  isTRUE(all.equal(
+    unname(as.matrix(casas_tratado)),
+    unname(as.matrix(dados_originais_davi[linhas_mantidas_davi, ]))
+  )),
+  nobs(modelo_inicial) == nrow(casas_tratado)
+)
+id_casas_davi <- tibble(
+  obs_tratada = seq_len(nrow(casas_tratado)),
+  linha_original = linhas_mantidas_davi
+)
+n_davi <- nobs(modelo_inicial)
+p_davi <- modelo_inicial$rank # Inclui o intercepto.
+```
+
 # 5. Seleção e modelo final
 
 # 6. Conclusão
