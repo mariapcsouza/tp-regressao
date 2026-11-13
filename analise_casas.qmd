@@ -31,7 +31,6 @@ editor: visual
 
 ```{r}
 library(tidyverse)
-library(reglin)
 library(car)
 library(broom)
 # adicionar mais aqui se necessário
@@ -594,6 +593,504 @@ Pontos Discrepantes/Influentes: Identificamos várias observações atípicas, c
 Sugestão de Ação: A violação conjunta de linearidade, normalidade e variância (frequentemente causada pela métrica original das variáveis) sugere que você deve testar transformações estabilizadoras. Recomenda-se aplicar a transformação de Box-Cox na variável preco (como o logaritmo, comum em valores monetários) para corrigir as falhas sistemáticas antes de remover qualquer outlier.
 
 # 4. Problemas e correções
+
+Nesta seção, aprofundamos os problemas identificados no modelo completo e
+avaliamos correções sem selecionar variáveis, tarefa reservada à seção 5.
+Usamos as mesmas 545 casas e mantemos as contagens como numéricas. Os limites
+dos diagnósticos servem para investigação, não como regras de exclusão.
+
+## 4.1. Multicolinearidade e identificação das observações
+
+O fator de inflação da variância (VIF) mede quanto a variância de um
+coeficiente aumenta pela associação linear entre sua covariável e as demais.
+Valores acima de 5 merecem atenção e acima de 10 sugerem um problema mais
+acentuado; esses valores são referências práticas, não testes de hipótese.
+Como todos os termos têm um grau de liberdade, usamos o VIF usual, inclusive
+para os fatores binários.
+
+```{r}
+#| label: davi-vif
+tabela_vif <- tibble(
+  variavel = names(car::vif(modelo_inicial)),
+  VIF = unname(car::vif(modelo_inicial))
+) |>
+  mutate(tolerancia = 1 / VIF) |>
+  arrange(desc(VIF))
+
+knitr::kable(tabela_vif, digits = 3,
+             caption = "VIF e tolerância no modelo completo")
+```
+
+O maior VIF foi `r round(max(tabela_vif$VIF), 2)`, para
+`r tabela_vif$variavel[1]`. Assim, não há evidência de multicolinearidade
+acentuada que justifique retirar covariáveis. Isso não significa ausência
+de associação entre elas, nem permite concluir que uma variável com teste t
+não significativo seja dispensável. A seleção será discutida posteriormente.
+
+Para rastrear as casas sinalizadas, distinguimos a posição na base tratada
+da linha original do banco. A linha original abaixo conta os registros a
+partir de 1, sem o cabeçalho do CSV. O identificador fica separado dos dados
+usados na regressão, evitando sua inclusão acidental como preditor em `~ .`.
+
+```{r}
+#| label: davi-identificacao
+dados_originais_davi <- read.csv("dados/casas.csv", encoding = "UTF-8")
+linhas_mantidas_davi <- which(!duplicated(dados_originais_davi))
+stopifnot(
+  nrow(casas_tratado) == length(linhas_mantidas_davi),
+  isTRUE(all.equal(
+    unname(as.matrix(casas_tratado)),
+    unname(as.matrix(dados_originais_davi[linhas_mantidas_davi, ]))
+  )),
+  nobs(modelo_inicial) == nrow(casas_tratado)
+)
+id_casas_davi <- tibble(
+  obs_tratada = seq_len(nrow(casas_tratado)),
+  linha_original = linhas_mantidas_davi
+)
+n_davi <- nobs(modelo_inicial)
+p_davi <- modelo_inicial$rank # Inclui o intercepto.
+```
+
+## 4.2. Resíduos atípicos, alavancagem e influência
+
+Um resíduo studentizado externamente elevado indica um preço pouco
+compatível com as características observadas. A alavancagem identifica
+combinações incomuns de covariáveis, independentemente do preço. Já Cook e
+DFFITS avaliam quanto a retirada de uma casa altera o ajuste. Portanto, uma
+casa pode ter alto resíduo sem apresentar alta alavancagem.
+
+Adotamos $|t_i|>3$, $h_{ii}>2p/n$, $D_i>4/n$ e
+$|\mathrm{DFFITS}_i|>2\sqrt{p/n}$ como critérios exploratórios, com
+$n=545$ e $p=12$ (incluindo o intercepto). Como investigamos muitas casas,
+esses cortes não devem ser interpretados como testes simultâneos a 5%.
+
+```{r}
+#| label: davi-influencia
+diagnosticar_davi <- function(modelo) {
+  n <- nobs(modelo)
+  p <- modelo$rank
+  tibble(
+    res_student = unname(rstudent(modelo)),
+    alavancagem = unname(hatvalues(modelo)),
+    cook = unname(cooks.distance(modelo)),
+    dffits = unname(dffits(modelo))
+  ) |>
+    mutate(
+      residuo_alto = abs(res_student) > 3,
+      alavancagem_alta = alavancagem > 2 * p / n,
+      cook_alto = cook > 4 / n,
+      dffits_alto = abs(dffits) > 2 * sqrt(p / n),
+      investigar = residuo_alto | alavancagem_alta | cook_alto | dffits_alto
+    )
+}
+
+influencia_inicial_davi <- bind_cols(
+  id_casas_davi, preco = casas_tratado$preco,
+  diagnosticar_davi(modelo_inicial)
+)
+
+limites_davi <- tibble(
+  criterio = c("|Resíduo studentizado|", "Alavancagem", "Cook", "|DFFITS|"),
+  limite = c(3, 2 * p_davi / n_davi, 4 / n_davi, 2 * sqrt(p_davi / n_davi)),
+  casas_sinalizadas = c(
+    sum(influencia_inicial_davi$residuo_alto),
+    sum(influencia_inicial_davi$alavancagem_alta),
+    sum(influencia_inicial_davi$cook_alto),
+    sum(influencia_inicial_davi$dffits_alto)
+  )
+)
+knitr::kable(limites_davi, digits = 4,
+             caption = "Limites de triagem e contagens no modelo inicial")
+
+influencia_inicial_davi |>
+  arrange(desc(cook)) |>
+  slice_head(n = 10) |>
+  select(obs_tratada, linha_original, preco, res_student, alavancagem, cook, dffits) |>
+  knitr::kable(digits = 3, caption = "Dez casas com maior distância de Cook")
+```
+
+Ao todo, `r sum(influencia_inicial_davi$investigar)` casas atendem a pelo
+menos um critério; as contagens da tabela se sobrepõem. Há
+`r sum(influencia_inicial_davi$residuo_alto)` resíduos com módulo superior a
+3 e `r sum(influencia_inicial_davi$cook_alto)` distâncias de Cook acima de
+$4/n$. Nenhuma distância de Cook ultrapassa 1, mas isso não elimina a
+necessidade de avaliar sensibilidade.
+
+As observações tratadas 103, 363 e 93 têm as maiores distâncias de Cook.
+A observação 378 apresenta o maior resíduo studentizado positivo, mas sua
+alavancagem é inferior ao corte. Logo, não se deve atribuir alta alavancagem
+a todas as casas com resíduos elevados. Os dados disponíveis também não
+permitem afirmar que sejam mansões, erros de registro ou vendas irregulares.
+
+```{r}
+#| label: davi-grafico-influencia
+#| fig-width: 9
+#| fig-height: 7
+#| fig-cap: "Diagnósticos do modelo inicial; linhas tracejadas indicam os cortes de triagem."
+influencia_inicial_davi |>
+  transmute(obs_tratada, `|Resíduo studentizado|` = abs(res_student),
+            Alavancagem = alavancagem, Cook = cook, `|DFFITS|` = abs(dffits)) |>
+  pivot_longer(-obs_tratada, names_to = "criterio", values_to = "valor") |>
+  ggplot(aes(obs_tratada, valor)) +
+  geom_point(alpha = 0.55, size = 1) +
+  geom_hline(data = limites_davi, aes(yintercept = limite),
+             color = "firebrick", linetype = "dashed") +
+  facet_wrap(~ criterio, scales = "free_y") +
+  labs(x = "Observação na base tratada", y = "Valor do diagnóstico") +
+  theme_minimal()
+```
+
+Mantemos todas as observações nesta etapa: influência é uma propriedade da
+relação entre dados e modelo, não uma prova de erro. Primeiro avaliamos
+transformações; depois verificamos se as conclusões dependem das casas
+mais influentes no modelo transformado.
+
+## 4.3. Transformações e comparação antes/depois
+
+### Escolha das escalas
+
+Como os preços são positivos e o espalhamento dos resíduos cresce com os
+valores ajustados, investigamos a transformação de Box-Cox da resposta:
+$(y^\lambda-1)/\lambda$ para $\lambda\ne0$ e $\log(y)$ para $\lambda=0$.
+O perfil abaixo mantém todas as covariáveis e todas as casas. O intervalo
+de 95% é aproximado pela razão de verossimilhanças em uma grade de valores.
+
+```{r}
+#| label: davi-boxcox
+#| fig-cap: "Perfil de Box-Cox do preço, condicionado às covariáveis do modelo inicial."
+boxcox_davi <- MASS::boxcox(
+  modelo_inicial, lambda = seq(-0.5, 1, by = 0.01), plotit = FALSE
+)
+lambda_davi <- boxcox_davi$x[which.max(boxcox_davi$y)]
+corte_bc_davi <- max(boxcox_davi$y) - qchisq(0.95, df = 1) / 2
+ic_lambda_davi <- range(boxcox_davi$x[boxcox_davi$y >= corte_bc_davi])
+
+plot(boxcox_davi$x, boxcox_davi$y, type = "l",
+     xlab = expression(lambda), ylab = "Log-verossimilhança perfilada")
+abline(h = corte_bc_davi, lty = 2, col = "firebrick")
+abline(v = c(0, lambda_davi), lty = c(3, 2), col = c("steelblue", "black"))
+legend("bottomleft", c("Logaritmo (lambda = 0)", "Máximo", "Corte de 95%"),
+       lty = c(3, 2, 2), col = c("steelblue", "black", "firebrick"), bty = "n")
+```
+
+O máximo ocorre em $\lambda=$ `r round(lambda_davi, 2)`, com intervalo
+aproximado [`r round(ic_lambda_davi[1], 2)`;
+`r round(ic_lambda_davi[2], 2)`]. O intervalo inclui zero e exclui 1,
+apoiando o logaritmo como uma transformação simples e interpretável. Isso
+não garante que todos os pressupostos sejam atendidos após a transformação.
+
+Comparamos três especificações completas: preço na escala original (M0),
+logaritmo natural do preço (M1) e logaritmos do preço e da área do lote (M2).
+Em M2, a relação com a área admite retornos proporcionais: um mesmo aumento
+absoluto do lote pode ter associação diferente com o preço em lotes pequenos
+e grandes. As demais covariáveis permanecem iguais.
+
+```{r}
+#| label: davi-modelos-transformados
+stopifnot(all(casas_tratado$preco > 0), all(casas_tratado$area_lote > 0))
+modelo_log_preco <- update(modelo_inicial, log(preco) ~ .)
+modelo_log_preco_area <- update(
+  modelo_log_preco, . ~ . - area_lote + log(area_lote)
+)
+modelos_davi <- list(
+  M0 = modelo_inicial, M1 = modelo_log_preco, M2 = modelo_log_preco_area
+)
+```
+
+### Diagnósticos após as transformações
+
+Repetimos os testes de Breusch-Pagan (versão studentizada de `bptest`) e
+Shapiro-Wilk, juntamente com os diagnósticos de influência. Os testes são
+complementos dos gráficos; um p-valor maior não demonstra que um pressuposto
+seja verdadeiro. A alavancagem de M1 é idêntica à de M0 porque depende apenas
+da matriz de covariáveis; em M2, essa matriz muda.
+
+```{r}
+#| label: davi-comparacao-diagnosticos
+comparacao_diagnosticos_davi <- purrr::imap_dfr(modelos_davi, function(m, nome) {
+  infl <- diagnosticar_davi(m)
+  tibble(
+    modelo = nome,
+    p_BP = lmtest::bptest(m)$p.value,
+    p_Shapiro = shapiro.test(residuals(m))$p.value,
+    residuos_altos = sum(infl$residuo_alto),
+    alavancagens_altas = sum(infl$alavancagem_alta),
+    Cook_alto = sum(infl$cook_alto),
+    DFFITS_alto = sum(infl$dffits_alto)
+  )
+})
+comparacao_diagnosticos_davi |>
+  mutate(across(starts_with("p_"), ~ format.pval(.x, digits = 3, eps = 1e-16))) |>
+  knitr::kable(caption = "Diagnósticos nas três especificações completas")
+
+residuos_modelos_davi <- purrr::imap_dfr(modelos_davi, function(m, nome) {
+  tibble(modelo = nome, ajustado = fitted(m), res_student = rstudent(m),
+         area_lote = casas_tratado$area_lote)
+})
+```
+
+```{r}
+#| label: davi-residuos-transformados
+#| fig-width: 10
+#| fig-height: 4
+#| fig-cap: "Resíduos studentizados versus ajustados; M0 em CAD, M1 e M2 em log(CAD)."
+ggplot(residuos_modelos_davi, aes(ajustado, res_student)) +
+  geom_point(alpha = 0.4, size = 1) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_smooth(method = "loess", formula = y ~ x, se = FALSE) +
+  facet_wrap(~ modelo, scales = "free_x") +
+  labs(x = "Valor ajustado na escala da resposta", y = "Resíduo studentizado") +
+  theme_minimal()
+```
+
+```{r}
+#| label: davi-qq-transformados
+#| fig-width: 10
+#| fig-height: 4
+#| fig-cap: "Comparação dos gráficos quantil-quantil dos resíduos studentizados."
+ggplot(residuos_modelos_davi, aes(sample = res_student)) +
+  stat_qq(alpha = 0.5, size = 1) +
+  stat_qq_line(color = "firebrick") +
+  facet_wrap(~ modelo) +
+  labs(x = "Quantil teórico normal", y = "Quantil observado") +
+  theme_minimal()
+```
+
+```{r}
+#| label: davi-residuos-area
+#| fig-width: 10
+#| fig-height: 4
+#| fig-cap: "Resíduos versus área do lote, para avaliar o padrão associado a essa covariável."
+ggplot(residuos_modelos_davi, aes(area_lote, res_student)) +
+  geom_point(alpha = 0.4, size = 1) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_smooth(method = "loess", formula = y ~ x, se = FALSE) +
+  facet_wrap(~ modelo) +
+  labs(x = "Área do lote (m²)", y = "Resíduo studentizado") +
+  theme_minimal()
+```
+
+Nos gráficos de resíduos versus ajustados, a curvatura observada em M0
+fica menos evidente em M1 e M2. Em relação à área, ainda há oscilações nas
+extremidades, onde existem poucas casas; não interpretamos a suavização
+nessas regiões como prova de que a forma funcional esteja resolvida.
+As transformações reduzem os desvios na cauda superior e a quantidade de
+casas sinalizadas por Cook (de
+`r comparacao_diagnosticos_davi$Cook_alto[1]` em M0 para
+`r comparacao_diagnosticos_davi$Cook_alto[3]` em M2). Entretanto, o
+Shapiro-Wilk ainda rejeita a normalidade a 5% em M2
+(p = `r signif(comparacao_diagnosticos_davi$p_Shapiro[3], 3)`). Portanto,
+a transformação melhora o comportamento dos resíduos, mas não constitui
+uma correção completa. O Breusch-Pagan também permanece significativo a 5%
+em M1 (p = `r signif(comparacao_diagnosticos_davi$p_BP[2], 3)`) e M2
+(p = `r signif(comparacao_diagnosticos_davi$p_BP[3], 3)`). Há, portanto,
+evidência remanescente de heterocedasticidade, que deve ser considerada na
+inferência e na validação do modelo final.
+
+### Comparação do ajuste na mesma escala
+
+Não comparamos diretamente os $R^2$, erros padrão residuais ou AICs brutos
+de respostas em escalas diferentes. Para expressar a verossimilhança de M1
+e M2 na escala do preço, incluímos o jacobiano da transformação:
+$\ell_y=\ell_{\log y}-\sum_i\log(y_i)$. Assim, somamos
+$2\sum_i\log(y_i)$ ao AIC e ao BIC desses modelos. Essa comparação pressupõe
+os respectivos modelos gaussianos e usa exatamente as mesmas observações.
+
+```{r}
+#| label: davi-criterios-mesma-escala
+criterios_davi <- purrr::imap_dfr(modelos_davi, function(m, nome) {
+  jacobiano <- if (nome == "M0") 0 else 2 * sum(log(casas_tratado$preco))
+  tibble(modelo = nome, AIC_preco = AIC(m) + jacobiano,
+         BIC_preco = BIC(m) + jacobiano)
+})
+knitr::kable(criterios_davi, digits = 2,
+             caption = "Critérios de informação na escala original do preço")
+```
+
+Complementamos com validação cruzada em 10 partes, usando as mesmas partições
+nos três modelos. Cada casa é prevista por um ajuste que não a utilizou.
+Nos modelos logarítmicos, usamos
+$\widehat{y}=\exp(\widehat{\log y})\,\overline{\exp(e)}$, com o fator de
+retransformação (*smearing*) calculado somente nos dados de treinamento.
+Esse fator global aproxima a média na escala original, mas pode ser
+insuficiente se a distribuição dos erros variar com as covariáveis.
+
+```{r}
+#| label: davi-validacao-cruzada
+set.seed(20261112)
+partes_davi <- sample(rep(seq_len(10), length.out = n_davi))
+comparacao_cv_davi <- purrr::imap_dfr(modelos_davi, function(m, nome) {
+  previsao <- rep(NA_real_, n_davi)
+  for (k in seq_len(10)) {
+    treino <- casas_tratado[partes_davi != k, , drop = FALSE]
+    teste <- casas_tratado[partes_davi == k, , drop = FALSE]
+    ajuste <- lm(formula(m), data = treino)
+    estimativa <- predict(ajuste, newdata = teste)
+    if (nome != "M0") {
+      estimativa <- exp(estimativa) * mean(exp(residuals(ajuste)))
+    }
+    previsao[partes_davi == k] <- estimativa
+  }
+  stopifnot(all(is.finite(previsao)))
+  erro <- casas_tratado$preco - previsao
+  tibble(modelo = nome, RMSE_CAD = sqrt(mean(erro^2)), MAE_CAD = mean(abs(erro)))
+})
+knitr::kable(comparacao_cv_davi, digits = 2,
+             caption = "Erros de validação cruzada na escala do preço (CAD)")
+```
+
+M2 apresenta menor AIC e BIC corrigidos. Na validação cruzada, seu RMSE é
+CAD `r round(comparacao_cv_davi$RMSE_CAD[3], 2)`, frente a CAD
+`r round(comparacao_cv_davi$RMSE_CAD[1], 2)` em M0. O MAE informa o erro
+absoluto médio e é menos sensível a erros extremos do que o RMSE.
+Esta é uma comparação exploratória com uma partição aleatória; não fornece
+incerteza sobre a diferença entre modelos nem substitui a validação da
+seleção que será feita na seção 5.
+
+## 4.4. Inferência robusta e sensibilidade às casas influentes
+
+### Erros padrão robustos à heterocedasticidade
+
+Como M2 ainda apresenta evidência de variância não constante, calculamos
+erros padrão HC3, que ajustam a matriz de covariância levando em conta os
+resíduos e a alavancagem. Os coeficientes e valores ajustados permanecem
+iguais. Os intervalos e testes abaixo usam a distribuição t com os graus de
+liberdade residuais como aproximação; HC3 não corrige a forma da média,
+não torna os resíduos normais e não elimina eventual dependência entre casas.
+
+```{r}
+#| label: davi-inferencia-hc3
+cov_hc3_davi <- car::hccm(modelo_log_preco_area, type = "hc3")
+ep_hc3_davi <- sqrt(diag(cov_hc3_davi))
+gl_davi <- df.residual(modelo_log_preco_area)
+tabela_hc3_davi <- tibble(
+  termo = names(coef(modelo_log_preco_area)),
+  estimativa = unname(coef(modelo_log_preco_area)),
+  EP_classico = unname(sqrt(diag(vcov(modelo_log_preco_area)))),
+  EP_HC3 = unname(ep_hc3_davi)
+) |>
+  mutate(
+    IC95_inf = estimativa - qt(0.975, gl_davi) * EP_HC3,
+    IC95_sup = estimativa + qt(0.975, gl_davi) * EP_HC3,
+    p_HC3 = 2 * pt(-abs(estimativa / EP_HC3), df = gl_davi)
+  )
+tabela_hc3_davi |>
+  mutate(p_HC3 = format.pval(p_HC3, digits = 3, eps = 1e-16)) |>
+  knitr::kable(digits = 4,
+               caption = "Coeficientes de M2 e inferência HC3 na escala logarítmica")
+```
+
+Em M2, os intervalos HC3 das covariáveis permanecem inteiramente positivos
+a 95%. Em particular, `quartos` apresenta p-valor robusto de
+`r signif(tabela_hc3_davi$p_HC3[tabela_hc3_davi$termo == "quartos"], 3)`,
+diferentemente do resultado no modelo original. Isso mostra que a evidência
+sobre uma covariável depende também da especificação da relação com o preço;
+não seria adequado eliminá-la apenas pelo teste t de M0.
+
+### Reajuste apenas para avaliar sensibilidade
+
+Recalculamos a influência em M2 e retiramos, **somente em um ajuste de
+sensibilidade**, as casas que ultrapassam o corte de Cook ou de DFFITS.
+Essa retirada conjunta é uma perturbação exploratória da amostra: os mesmos
+dados foram usados para identificar e retirar os casos. Por isso, não
+interpretamos um eventual ajuste melhor como justificativa para eliminá-los,
+nem comparamos AICs de amostras diferentes.
+
+```{r}
+#| label: davi-sensibilidade
+influencia_m2_davi <- bind_cols(id_casas_davi, diagnosticar_davi(modelo_log_preco_area))
+retirar_davi <- influencia_m2_davi$cook_alto | influencia_m2_davi$dffits_alto
+modelo_sensibilidade_davi <- update(
+  modelo_log_preco_area, data = casas_tratado[!retirar_davi, , drop = FALSE]
+)
+
+influencia_m2_davi |>
+  filter(retirar_davi) |>
+  arrange(desc(cook)) |>
+  slice_head(n = 10) |>
+  select(obs_tratada, linha_original, res_student, alavancagem, cook, dffits) |>
+  knitr::kable(digits = 3, caption = "Dez maiores distâncias de Cook em M2")
+
+sensibilidade_coef_davi <- tibble(
+  termo = names(coef(modelo_log_preco_area)),
+  beta_completo = unname(coef(modelo_log_preco_area)),
+  beta_sensibilidade = unname(coef(modelo_sensibilidade_davi))
+) |>
+  mutate(
+    diferenca = beta_sensibilidade - beta_completo,
+    diferenca_em_EP_HC3 = diferenca / unname(ep_hc3_davi),
+    mudou_sinal = sign(beta_completo) != sign(beta_sensibilidade)
+  )
+knitr::kable(sensibilidade_coef_davi, digits = 4,
+             caption = "Mudanças dos coeficientes de M2 no ajuste de sensibilidade")
+```
+
+Foram retiradas `r sum(retirar_davi)` casas neste exercício, restando
+`r nobs(modelo_sensibilidade_davi)` observações. As linhas originais
+sinalizadas são: `r paste(influencia_m2_davi$linha_original[retirar_davi], collapse = ", ")`.
+As diferenças da tabela são expressas também em unidades do erro padrão
+robusto do ajuste completo, permitindo comparar coeficientes de escalas
+distintas; essa razão não é um teste de hipótese.
+
+```{r}
+#| label: davi-resumo-sensibilidade
+sensibilidade_covariaveis_davi <- sensibilidade_coef_davi |>
+  filter(termo != "(Intercept)") |>
+  arrange(desc(abs(diferenca_em_EP_HC3)))
+
+predizer_preco_davi <- function(modelo, novos_dados) {
+  exp(predict(modelo, newdata = novos_dados)) * mean(exp(residuals(modelo)))
+}
+previsao_completa_davi <- predizer_preco_davi(modelo_log_preco_area, casas_tratado)
+previsao_sensibilidade_davi <- predizer_preco_davi(modelo_sensibilidade_davi, casas_tratado)
+mudanca_previsao_davi <- 100 * abs(
+  previsao_sensibilidade_davi / previsao_completa_davi - 1
+)
+```
+
+Entre as covariáveis, `r sum(sensibilidade_covariaveis_davi$mudou_sinal)`
+coeficientes mudam de sinal. A maior mudança padronizada ocorre em
+`r sensibilidade_covariaveis_davi$termo[1]`, com magnitude de
+`r round(abs(sensibilidade_covariaveis_davi$diferenca_em_EP_HC3[1]), 2)`
+erros padrão HC3. Para as mesmas 545 casas, a mudança absoluta relativa das
+previsões tem mediana de `r round(median(mudanca_previsao_davi), 2)`% e
+percentil 95 de `r round(unname(quantile(mudanca_previsao_davi, 0.95)), 2)`%.
+Essa comparação descreve estabilidade entre ajustes; não mede erro de
+previsão fora da amostra. A manutenção dos sinais não implica que as
+magnitudes sejam insensíveis às casas sinalizadas.
+
+## 4.5. Encaminhamento para a seleção do modelo
+
+Não encontramos multicolinearidade acentuada no modelo inicial. As
+transformações melhoraram os diagnósticos e o desempenho preditivo nesta
+comparação, mas permaneceram desvios de normalidade e evidência de
+heterocedasticidade. Assim, recomendamos **M2 com todas as 545 casas como
+modelo completo candidato** para a próxima etapa, mantendo os erros padrão
+HC3 como referência complementar para a inferência. A análise de
+sensibilidade não substitui esse ajuste.
+
+```{r}
+#| label: davi-modelo-candidato
+modelo_candidato_davi <- modelo_log_preco_area
+vif_m2_davi <- car::vif(modelo_candidato_davi)
+```
+
+O VIF máximo de M2 é `r round(max(vif_m2_davi), 2)`, ainda abaixo de 5.
+Na seção 5, será necessário selecionar variáveis, repetir os diagnósticos
+no modelo selecionado e avaliar a estabilidade das conclusões. Os efeitos
+de M2 são multiplicativos: para uma covariável não transformada, uma unidade
+se associa a uma variação de $100[\exp(\beta)-1]$% na média geométrica
+condicional do preço, mantendo as demais constantes; para os fatores,
+compara-se "sim" a "não". O coeficiente de $\log(\text{area_lote})$ é uma
+elasticidade. A interpretação da média aritmética em CAD requer considerar
+também a retransformação, especialmente sob heterocedasticidade.
+
+Por fim, nenhuma transformação ou cálculo de HC3 demonstra independência
+dos erros. O banco não contém localização detalhada ou ordem temporal que
+permita investigar dependência espacial ou temporal adequadamente. Esse
+pressuposto permanece uma limitação, e as associações estimadas não devem
+ser interpretadas como efeitos causais.
 
 # 5. Seleção e modelo final
 
