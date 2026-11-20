@@ -213,6 +213,8 @@ knitr::kable(
 )
 ```
 
+A partir das estatísticas descritivas, observa-se que os 545 imóveis analisados apresentam preço médio de aproximadamente CAD 68.096, enquanto a mediana é de CAD 62.000. A diferença entre esses valores mostra que alguns imóveis com preços mais elevados influenciam a média. Os preços variam de CAD 25.000 a CAD 190.000, demonstrando uma dispersão considerável. Em relação às características das propriedades, observa-se que os imóveis possuem, em média, aproximadamente 3 quartos, 1 banheiro e 2 andares. Já o número médio de vagas de garagem é inferior a 1, indicando que muitos imóveis não possuem garagem. A área dos lotes também apresenta variação expressiva, com valores entre aproximadamente 153 m² e 1.505 m².
+
 ```{r}
 variaveis_qualitativas <- casas_tratado %>%
   select(where(is.factor)) %>%
@@ -244,7 +246,7 @@ knitr::kable(
 )
 ```
 
-Essa separação permite obter uma visão geral das características dos imóveis e entender o comportamento das variáveis que vão ser utilizadas nas análises seguintes.
+Em relação às variáveis qualitativas, observa-se que a maioria dos imóveis possui entrada para carro (85,87%). Por outro lado, características como área de recreação (17,80%) e localização em área preferencial (23,49%) aparecem com menor frequência na amostra. Também destaca a baixa quantidade de imóveis com aquecimento a gás, presente em apenas 4,59% das observações. Além disso, 31,56% dos imóveis possuem ar-condicionado central e 35,05% possuem porão totalmente acabado. Dessa forma, é possível perceber que algumas características estão presentes na maioria das propriedades, enquanto outras são menos comuns no conjunto de dados.
 
 ## 2.2. Distribuição dos preços dos imóveis
 
