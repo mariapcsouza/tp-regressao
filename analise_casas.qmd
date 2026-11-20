@@ -562,20 +562,40 @@ shapiro.test(residuals(modelo_inicial))
 
 **Independência**
 
-Como o banco de dados é composto por registros de diferentes casas em Windsor coletados no ano de 1987, trata-se de dados de corte transversal. Nesse tipo de estrutura, não há uma ordenação temporal, espacial ou sequencial natural entre as linhas que justifique a expectativa de autocorrelação. Portanto, o pressuposto de independência dos erros pode ser assumido pelo próprio desenho do estudo, sem a exigência de testes formais para erros autocorrelacionados.
+```{r}
+lmtest::dwtest(modelo_inicial)
+car::durbinWatsonTest(modelo_inicial)
+```
+
+Os registros são de casas diferentes vendidas em Windsor em 1987, então não esperamos autocorrelação temporal no sentido usual. Mesmo assim, o banco vem numa ordem específica (a correlação entre o número da linha e o preço é 0,38, então as linhas não estão em ordem aleatória), e por isso aplicamos o teste de Durbin-Watson aos resíduos nessa ordem. A estatística foi DW = 1,60 (autocorrelação de lag 1 estimada em cerca de 0,20, p [conferir]), o que rejeita a hipótese de erros não correlacionados. Não sabemos o que a ordem das linhas representa (pode ser data de venda, região ou outro critério do arquivo original), então não dá para atribuir uma causa. De qualquer forma, a independência dos erros não pode ser simplesmente assumida pelo desenho do estudo. Erros positivamente correlacionados tendem a deixar os erros padrão subestimados, então os p-valores e intervalos de confiança podem ser otimistas. Mantemos esse ponto como limitação.
+
 
 **Observações que chamam atenção**
 
-O filtro destacou casas que apresentam altos resíduos e alta influência no ajuste da reta. As observações 378, 93 e 363, por exemplo, possuem resíduos estudentizados absolutos bem acima do esperado e estão entre as maiores Distâncias de Cook, sugerindo que esses imóveis foram vendidos por valores muito diferentes do padrão capturado pelo modelo (possivelmente mansões ou vendas atípicas).
-
 ```{r}
-#| label: influentes
-diag |>
-  filter(.cooksd > 4 / nrow(casas_tratado) | abs(res_stud) > 3) |>
-  select(obs, preco, res_stud, .hat, .cooksd) |>
-  arrange(desc(.cooksd)) |>
-  knitr::kable(digits = 3)
+n <- nobs(modelo_inicial); p <- modelo_inicial$rank
+lim_t <- qt(1 - 0.05 / (2 * n), n - p - 1)
+
+tibble(
+  criterio = c("|t_i| > t(α/2n)", "h ≥ 3p/n", "|DFFITS| > 3√(p/(n−p))",
+               "Cook > F(0,5)", "|1−COVRATIO| > 3p/(n−p)", "|DFBETAS| > 1"),
+  corte = c(lim_t, 3*p/n, 3*sqrt(p/(n-p)), qf(.5, p, n-p), 3*p/(n-p), 1),
+  casas = c(sum(abs(rstudent(modelo_inicial)) > lim_t),
+            sum(hatvalues(modelo_inicial) >= 3*p/n),
+            sum(abs(dffits(modelo_inicial)) > 3*sqrt(p/(n-p))),
+            sum(cooks.distance(modelo_inicial) > qf(.5, p, n-p)),
+            sum(abs(1 - covratio(modelo_inicial)) > 3*p/(n-p)),
+            sum(abs(dfbetas(modelo_inicial)) > 1))
+) |> knitr::kable(digits = 3)
+
+car::outlierTest(modelo_inicial)
+
+diag |> arrange(desc(.cooksd)) |> slice_head(n = 10) |>
+  select(obs, preco, res_stud, .hat, .cooksd) |> knitr::kable(digits = 3)
 ```
+Pelos critérios do material do curso, um ponto é inconsistente se o módulo do resíduo studentizado passa de t(α/2n; n−p−1). Com α = 0,05, n = 545 e p = 12, esse valor é cerca de 3,94, e três casas passam dele: 378 (5,01), 93 (4,56) e 363 (4,44), todas com p-valor de Bonferroni abaixo de 5% (0,0004; 0,003 e 0,006). São casas caras (CAD 190.000, 163.000 e 175.000), vendidas por muito mais do que o modelo previa. Porém têm alavancagem baixa (0,020, 0,027 e 0,028, contra o corte 3p/n = 0,066), então são outliers, e não pontos de alavanca. Nenhuma casa tem, ao mesmo tempo, resíduo inconsistente e alavancagem alta.
+
+Quanto à influência, nenhuma distância de Cook chega perto do corte F(0,5; 12; 533) ≈ 0,95 (a maior é 0,046) e nenhum |DFBETAS| passa de 1 (o maior é 0,61). Já 14 casas passam do corte do DFFITS e 28 do COVRATIO, então algumas casas têm influência moderada, mas nenhuma muda sozinha o ajuste de forma drástica. Os dados não explicam por que esses preços fogem do padrão (pode ser acabamento, venda atípica ou alguma variável que não está no banco), então não tiramos conclusão sobre isso.
 
 ```{r}
 #| label: vif-rapido
