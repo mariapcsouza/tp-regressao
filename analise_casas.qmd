@@ -48,7 +48,7 @@ glimpse(casas)
 
 O banco de dados tem 546 linhas e 12 colunas. As variáveis podem ser classificadas como:
 
-- **Variável resposta (`<dbl>`):** `preco` (preço de venda do imóvel, variável quantitativa contínua expressa em dólares canadenses).
+- **Variável resposta (`<dbl>`):** `preco` (preço de venda do imóvel, variável quantitativa contínua expressa em CAD).
 - **Covariável quantitativa contínua (`<dbl>`):** `area_lote` (área total do lote do imóvel, em $m^2$).
 - **Covariáveis quantitativas discretas (`<int>`):** `quartos`, `banheiros`, `andares` e `vagas_garagem`(contagem de cada item).
 - **Covariáveis qualitativas binárias (`<chr>`: "sim"/"não"):** `entrada_carro`, `area_recreacao`, `porao`, `aquecimento_gas`, `ar_condicionado` e `area_preferencial`(presença ou ausência do atributo).
@@ -259,7 +259,7 @@ ggplot(casas_tratado, aes(x = preco)) +
   ) +
   labs(
     title = "Distribuição dos preços dos imóveis",
-    x = "Preço (dólares canadenses)",
+    x = "Preço (CAD)",
     y = "Frequência"
   ) +
   theme_minimal()
@@ -276,7 +276,7 @@ ggplot(casas_tratado, aes(x = "", y = preco)) +
   labs(
     title = "Boxplot dos preços dos imóveis",
     x = NULL,
-    y = "Preço (dólares canadenses)"
+    y = "Preço (CAD)"
   ) +
   theme_minimal()
 ```
@@ -316,7 +316,7 @@ ggplot(
   labs(
     title = "Distribuição dos preços por características da propriedade",
     x = "Categoria",
-    y = "Preço (dólares canadenses)"
+    y = "Preço (CAD)"
   ) +
   theme_minimal() +
   theme(
@@ -352,7 +352,7 @@ ggplot(
   labs(
     title = "Distribuição dos preços por localização",
     x = "Área preferencial",
-    y = "Preço (dólares canadenses)"
+    y = "Preço (CAD)"
   ) +
   theme_minimal() +
   theme(
@@ -428,7 +428,7 @@ ggplot(
   labs(
     title = "Relação entre preço e variáveis quantitativas",
     x = "Valor da variável",
-    y = "Preço (dólares canadenses)"
+    y = "Preço (CAD)"
   ) +
   theme_minimal()
 ```
@@ -526,7 +526,7 @@ ggplot(diag, aes(.fitted, res_stud)) +
   geom_point(alpha = .5) +
   geom_hline(yintercept = 0, linetype = "dashed") +
   geom_smooth(se = FALSE) +
-  labs(x = "Valores ajustados", y = "Resíduo studentizado")
+  labs(x = "Valores ajustados (CAD)", y = "Resíduo studentizado")
 ```
 
 Para que os pressupostos sejam atendidos, o gráfico de resíduos versus valores ajustados deve apresentar um padrão completamente aleatório e disperso em torno de zero. No entanto, o gráfico revela duas violações: há uma evidente tendência curvilínea na linha de suavização (indicando não linearidade) e o espalhamento dos resíduos aumenta conforme o preço ajustado cresce, formando um padrão de "funil". O teste de Breusch-Pagan ($p = 4.314e-09$) confirma estatisticamente a rejeição da hipótese nula de variância constante, atestando a heterocedasticidade.
@@ -709,7 +709,10 @@ influencia_inicial_davi |>
   arrange(desc(cook)) |>
   slice_head(n = 10) |>
   select(obs_tratada, linha_original, preco, res_student, alavancagem, cook, dffits) |>
-  knitr::kable(digits = 3, caption = "Dez casas com maior distância de Cook")
+  knitr::kable(digits = 3,
+               col.names = c("Obs. tratada", "Linha original", "Preço (CAD)",
+                             "Res. student.", "Alavancagem", "Cook", "DFFITS"),
+               caption = "Dez casas com maior distância de Cook")
 ```
 
 Ao todo, `r sum(influencia_inicial_davi$investigar)` casas atendem a pelo menos um critério; as contagens da tabela se sobrepõem. Há `r sum(influencia_inicial_davi$residuo_alto)` resíduos com módulo superior a 3 e `r sum(influencia_inicial_davi$cook_alto)` distâncias de Cook acima de $4/n$. Nenhuma distância de Cook ultrapassa 1, mas isso não elimina a necessidade de avaliar sensibilidade.
@@ -859,7 +862,7 @@ criterios_davi <- purrr::imap_dfr(modelos_davi, function(m, nome) {
          BIC_preco = BIC(m) + jacobiano)
 })
 knitr::kable(criterios_davi, digits = 2,
-             caption = "Critérios de informação na escala original do preço")
+             caption = "Critérios de informação na escala original do preço (CAD)")
 ```
 
 Complementamos com validação cruzada em 10 partes, usando as mesmas partições nos três modelos. Cada casa é prevista por um ajuste que não a utilizou. Nos modelos logarítmicos, usamos $\widehat{y}=\exp(\widehat{\log y})\,\overline{\exp(e)}$, com o fator de retransformação (*smearing*) calculado somente nos dados de treinamento. Esse fator global aproxima a média na escala original, mas pode ser insuficiente se a distribuição dos erros variar com as covariáveis.
@@ -1087,11 +1090,11 @@ cv_res <- do.call(rbind, cv)
 
 knitr::kable(
   cv_res, digits = 0,
-  caption = "Erros de validação cruzada (dólares canadenses)"
+  caption = "Erros de validação cruzada (CAD)"
 )
 ```
 
-Os três modelos erraram quase o mesmo: o RMSE ficou entre `r round(min(cv_res$RMSE))` e `r round(max(cv_res$RMSE))` dólares, uma diferença pequena perto do erro típico de mais de 15 mil. O reduzido foi o pior por pouco. Ou seja, na previsão os modelos praticamente empatam.
+Os três modelos erraram quase o mesmo: o RMSE ficou entre CAD `r round(min(cv_res$RMSE))` e CAD `r round(max(cv_res$RMSE))`, uma diferença pequena perto do erro típico de mais de CAD 15.000. O reduzido foi o pior por pouco. Ou seja, na previsão os modelos praticamente empatam.
 
 ## 5.3. Escolha do modelo final
 
@@ -1214,6 +1217,6 @@ Mantendo as demais variáveis constantes:
 
 Todas as variáveis continuam significativas a 5% com os erros padrão robustos. O intercepto não tem interpretação prática, já que não existe uma casa com lote de 1 m² e nenhuma das outras características.
 
-Esses resultados são associações e não efeitos causais. Eles se referem à média geométrica do preço, não à média em dólares canadenses, e valem para as casas de Windsor em 1987.
+Esses resultados são associações e não efeitos causais. Eles se referem à média geométrica do preço em CAD, não à média aritmética, e valem para as casas de Windsor em 1987.
 
 # 6. Conclusão
