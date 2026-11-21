@@ -86,7 +86,7 @@ casas %>%
   )
 ```
 
-Também não existem registros inconsistentes na base.
+Não foram identificados valores inconsistentes nos critérios verificados.
 
 ## 1.4. Verificação de duplicatas
 
@@ -255,7 +255,7 @@ knitr::kable(
 )
 ```
 
-Em relação às variáveis qualitativas, observa-se que a maioria dos imóveis possui entrada para carro (85,87%). Por outro lado, características como área de recreação (17,80%) e localização em área preferencial (23,49%) aparecem com menor frequência na amostra. Também destaca a baixa quantidade de imóveis com aquecimento a gás, presente em apenas 4,59% das observações. Além disso, 31,56% dos imóveis possuem ar-condicionado central e 35,05% possuem porão totalmente acabado. Dessa forma, é possível perceber que algumas características estão presentes na maioria das propriedades, enquanto outras são menos comuns no conjunto de dados.
+Em relação às variáveis qualitativas, observa-se que a maioria dos imóveis possui entrada para carro (85,87%). Por outro lado, características como área de recreação (17,80%) e localização em área preferencial (23,49%) aparecem com menor frequência na amostra. Também destaca a baixa quantidade de imóveis com aquecimento de água a gás, presente em apenas 4,59% das observações. Além disso, 31,56% dos imóveis possuem ar-condicionado central e 35,05% possuem porão totalmente acabado. Dessa forma, é possível perceber que algumas características estão presentes na maioria das propriedades, enquanto outras são menos comuns no conjunto de dados.
 
 ## 2.2. Distribuição dos preços dos imóveis
 
@@ -330,11 +330,15 @@ ggplot(
   theme_minimal() +
   theme(
     legend.position = "none",
-    axis.text.x = element_text(angle = 0)
+    axis.text.x = element_text(angle = 0),
+    plot.title = element_text(
+      size = 11,
+      margin = margin(t = 6, b = 6)
+    )
   )
 ```
 
-- **Aquecimento a gás:** imóveis com aquecimento a gás apresentam preços medianos superiores aos imóveis sem essa característica.
+- **Aquecimento de água a gás:** imóveis com aquecimento a gás apresentam preços medianos superiores aos imóveis sem essa característica.
 
 - **Ar-condicionado:** observa-se uma diferença expressiva entre as categorias, com preços medianos mais elevados para imóveis que possuem ar-condicionado.
 
@@ -393,7 +397,7 @@ ggcorrplot(
   lab = TRUE,
   lab_size = 3,
   colors = c("#B2182B", "white", "#2166AC"),
-  title = "Matriz de correlação das variáveis quantitativas",
+  title = "Correlação das variáveis quantitativas",
   ggtheme = theme_minimal()
 )
 ```
@@ -454,13 +458,11 @@ ggplot(
 
 # 3. Modelo inicial e diagnóstico
 
-## 3.1 Modelo inicial
-
 ```{r}
 casas_tratado <- readRDS("dados/casas_tratado.rds")
 ```
 
-### 3.2 Ajuste do modelo completo
+### 3.1 Ajuste do modelo completo
 
 ```{r}
 #| label: ajuste-inicial
@@ -523,7 +525,7 @@ Essa tabela é **sequencial**: o efeito de cada variável é medido depois de de
 Para modelos com variáveis categóricas de mais de dois níveis o ideal seria `car::Anova`, mas como aqui todas as categóricas são binárias — 1 grau de liberdade cada —, o teste $t$ do `summary` já é matematicamente equivalente ao teste $F$ parcial/Tipo II.
 
 
-### 3.3 Diagnóstico
+### 3.2 Diagnóstico
 
 ```{r}
 #| label: dados-diagnostico
@@ -590,9 +592,9 @@ lmtest::dwtest(modelo_inicial)
 car::durbinWatsonTest(modelo_inicial)
 ```
 
-Os registros são de casas diferentes vendidas em Windsor em 1987, então não esperamos autocorrelação temporal no sentido usual. Mesmo assim, o banco vem numa ordem específica (a correlação entre o número da linha e o preço é 0,38, então as linhas não estão em ordem aleatória), e por isso aplicamos o teste de Durbin-Watson aos resíduos nessa ordem. 
+Os registros são de casas diferentes vendidas em Windsor em 1987, então não esperamos autocorrelação temporal no sentido usual. Mesmo assim, o banco vem numa ordem específica, e por isso aplicamos o teste de Durbin-Watson aos resíduos nessa ordem. 
 
-O teste retornou uma estatística DW = 1{,}60, com autocorrelação de lag 1 estimada em cerca de 0,20 e p-valor muito baixo, o que rejeita a hipótese de erros não correlacionados. Como o banco não informa o que a ordem das linhas representa (pode ser data de venda, região ou outro critério da coleta), não conseguimos apontar a causa exata dessa dependência. Ainda assim, isso mostra que não podemos simplesmente assumir independência pelo desenho do estudo: erros positivamente correlacionados tendem a subestimar os erros padrão, deixando os p-valores e intervalos de confiança mais otimistas do que deveriam. Por isso, mantemos esse ponto como uma limitação da análise. 
+O teste retornou uma estatística DW = 1,60, com autocorrelação de lag 1 estimada em cerca de 0,20 e p-valor muito baixo, o que rejeita a hipótese de erros não correlacionados. Como o banco não informa o que a ordem das linhas representa (pode ser data de venda, região ou outro critério da coleta), não conseguimos apontar a causa exata dessa dependência. Ainda assim, isso mostra que não podemos simplesmente assumir independência pelo desenho do estudo: erros positivamente correlacionados tendem a subestimar os erros padrão, deixando os p-valores e intervalos de confiança mais otimistas do que deveriam. Por isso, mantemos esse ponto como uma limitação da análise. 
 
 **Observações que chamam atenção**
 
@@ -601,8 +603,14 @@ n <- nobs(modelo_inicial); p <- modelo_inicial$rank
 lim_t <- qt(1 - 0.05 / (2 * n), n - p - 1)
 
 tibble(
-  criterio = c("|t_i| > t(α/2n)", "h ≥ 3p/n", "|DFFITS| > 3√(p/(n−p))",
-               "Cook > F(0,5)", "|1−COVRATIO| > 3p/(n−p)", "|DFBETAS| > 1"),
+  criterio = c(
+    "|t_i| > t(alpha/2n)",
+    "h >= 3p/n",
+    "|DFFITS| > 3*sqrt(p/(n-p))",
+    "Cook > F(0.5)",
+    "|1 - COVRATIO| > 3p/(n-p)",
+    "|DFBETAS| > 1"
+  ),
   corte = c(lim_t, 3*p/n, 3*sqrt(p/(n-p)), qf(.5, p, n-p), 3*p/(n-p), 1),
   casas = c(sum(abs(rstudent(modelo_inicial)) > lim_t),
             sum(hatvalues(modelo_inicial) >= 3*p/n),
@@ -618,9 +626,9 @@ diag |> arrange(desc(.cooksd)) |> slice_head(n = 10) |>
   select(obs, preco, res_stud, .hat, .cooksd) |> knitr::kable(digits = 3)
 ```
 
-Pelos critérios do material do curso, um ponto é inconsistente se o módulo do resíduo studentizado passa de t(α/2n; n−p−1). Com α = 0,05, n = 545 e p = 12, esse valor é cerca de 3,94, e três casas passam dele: 378 (5,01), 93 (4,56) e 363 (4,44), todas com p-valor de Bonferroni abaixo de 5% (0,0004; 0,003 e 0,006). São casas caras (CAD 190.000, 163.000 e 175.000), vendidas por muito mais do que o modelo previa. Porém têm alavancagem baixa (0,020, 0,027 e 0,028, contra o corte 3p/n = 0,066), então são outliers, e não pontos de alavanca. Nenhuma casa tem, ao mesmo tempo, resíduo inconsistente e alavancagem alta.
+Pelos critérios do material do curso, um ponto é inconsistente se o módulo do resíduo studentizado passa de t($\alpha/2n$; n−p−1). Com $\alpha$ = 0,05, n = 545 e p = 12, esse valor é cerca de 3,94, e três casas passam dele: 378 (5,01), 93 (4,56) e 363 (4,44), todas com p-valor de Bonferroni abaixo de 5% (0,0004; 0,003 e 0,006). São casas caras (CAD 190.000, 163.000 e 175.000), vendidas por muito mais do que o modelo previa. Porém têm alavancagem baixa (0,020, 0,027 e 0,028, contra o corte 3p/n = 0,066), então são outliers, e não pontos de alavanca. Nenhuma casa tem, ao mesmo tempo, resíduo inconsistente e alavancagem alta.
 
-Quanto à influência, nenhuma distância de Cook chega perto do corte F(0,5; 12; 533) ≈ 0,95 (a maior é 0,046) e nenhum \|DFBETAS\| passa de 1 (o maior é 0,61). Já 14 casas passam do corte do DFFITS e 28 do COVRATIO, então algumas casas têm influência moderada, mas nenhuma muda sozinha o ajuste de forma drástica. Os dados não explicam por que esses preços fogem do padrão (pode ser acabamento, venda atípica ou alguma variável que não está no banco), então não tiramos conclusão sobre isso.
+Quanto à influência, nenhuma distância de Cook chega perto do corte F(0,5; 12; 533) $\approx$ 0,95 (a maior é 0,046) e nenhum \|DFBETAS\| passa de 1 (o maior é 0,61). Já 14 casas passam do corte do DFFITS e 28 do COVRATIO, então algumas casas têm influência moderada, mas nenhuma muda sozinha o ajuste de forma drástica. Os dados não explicam por que esses preços fogem do padrão (pode ser acabamento, venda atípica ou alguma variável que não está no banco), então não tiramos conclusão sobre isso.
 
 **Multicolinearidade**
 
@@ -629,7 +637,7 @@ vif(modelo_inicial)
 ```
 Todos os fatores de inflação da variância (VIF) ficaram bem próximos de 1 — variando de 1,04 (aquecimento_gas) a 1,48 (andares) —, muito abaixo do limite de referência de 10 que sinalizaria problemas de multicolinearidade. Isso indica que, embora existam correlações moderadas entre algumas características das casas, não há dependência linear forte entre as covariáveis que comprometa a estimação dos coeficientes.
 
-### 3.4 Resumo dos problemas encontrados
+### 3.3 Resumo dos problemas encontrados
 
 Multicolinearidade: O modelo está livre deste problema. O VIF de todas as covariáveis ficou próximo de 1, muito abaixo do limite crítico de 10 que indicaria dependência linear grave entre elas.
 
@@ -1275,7 +1283,7 @@ Mantendo as demais variáveis constantes:
 - **Área do lote:** a elasticidade estimada é 0,30 (IC 95%: 0,25 a 0,36). Um lote 10% maior está associado a uma média geométrica do preço `r round(100 * (1.1^coef(modelo_final)["log(area_lote)"] - 1), 2)`% maior, usando a expressão exata $100[(1{,}1)^\beta-1]$.
 - **Banheiros:** cada banheiro a mais está associado a um preço cerca de 18% maior (IC 95%: 13% a 23%).
 - **Ar-condicionado:** casas com ar-condicionado central apresentam média geométrica do preço cerca de 18% maior (IC 95%: 13% a 23%).
-- **Aquecimento a gás:** a diferença é de cerca de 20%, mas o intervalo é largo (7,5% a 33%), porque poucas casas têm essa característica.
+- **Aquecimento de água a gás:** a diferença é de cerca de 20%, mas o intervalo é largo (7,5% a 33%), porque poucas casas têm essa característica.
 - **Bairro preferencial:** cerca de 14% a mais (IC 95%: 9% a 19%).
 - **Entrada para carro e porão:** cerca de 12% e 11% a mais, respectivamente.
 - **Andares:** cada andar a mais está associado a cerca de 10% a mais no preço.
