@@ -18,6 +18,18 @@ format:
     theme: cosmo
     df-print: kable
     fig-align: center
+  pdf:
+    pdf-engine: lualatex
+    toc: true
+    toc-depth: 3
+    toc-title: "Sumário"
+    fig-align: center
+    code-block-font-size: "\\scriptsize"
+    include-in-header:
+      text: |
+        \usepackage{fvextra}
+        \fvset{breaklines=true,breakanywhere=true}
+        \DefineVerbatimEnvironment{verbatim}{Verbatim}{breaklines=true,breakanywhere=true,fontsize=\footnotesize}
 execute:
   echo: true
   message: false
@@ -659,6 +671,9 @@ id_casas_davi <- tibble(
 )
 n_davi <- nobs(modelo_inicial)
 p_davi <- modelo_inicial$rank # Inclui o intercepto.
+formatar_cad <- function(x, digitos = 0) {
+  formatC(x, format = "f", digits = digitos, big.mark = ".", decimal.mark = ",")
+}
 ```
 
 ## 4.2. Resíduos atípicos, alavancagem e influência
@@ -799,7 +814,11 @@ comparacao_diagnosticos_davi <- purrr::imap_dfr(modelos_davi, function(m, nome) 
 })
 comparacao_diagnosticos_davi |>
   mutate(across(starts_with("p_"), ~ format.pval(.x, digits = 3, eps = 1e-16))) |>
-  knitr::kable(caption = "Diagnósticos nas três especificações completas")
+  knitr::kable(
+    col.names = c("Modelo", "p BP", "p Shapiro", "Resíduos", "Alavancagem",
+                  "Cook", "DFFITS"),
+    caption = "Diagnósticos nas três especificações completas (contagens acima dos cortes)"
+  )
 
 residuos_modelos_davi <- purrr::imap_dfr(modelos_davi, function(m, nome) {
   tibble(modelo = nome, ajustado = fitted(m), res_student = rstudent(m),
@@ -891,7 +910,7 @@ knitr::kable(comparacao_cv_davi, digits = 2,
              caption = "Erros de validação cruzada na escala do preço (CAD)")
 ```
 
-M2 apresenta menor AIC e BIC corrigidos. Na validação cruzada, seu RMSE é CAD `r round(comparacao_cv_davi$RMSE_CAD[3], 2)`, frente a CAD `r round(comparacao_cv_davi$RMSE_CAD[1], 2)` em M0. O MAE informa o erro absoluto médio e é menos sensível a erros extremos do que o RMSE. Esta é uma comparação exploratória com uma partição aleatória; não fornece incerteza sobre a diferença entre modelos nem substitui a validação da seleção que será feita na seção 5.
+M2 apresenta menor AIC e BIC corrigidos. Na validação cruzada, seu RMSE é CAD `r formatar_cad(comparacao_cv_davi$RMSE_CAD[3], 2)`, frente a CAD `r formatar_cad(comparacao_cv_davi$RMSE_CAD[1], 2)` em M0. O MAE informa o erro absoluto médio e é menos sensível a erros extremos do que o RMSE. Esta é uma comparação exploratória com uma partição aleatória; não fornece incerteza sobre a diferença entre modelos nem substitui a validação da seleção que será feita na seção 5.
 
 ## 4.4. Inferência robusta e sensibilidade às casas influentes
 
@@ -918,6 +937,8 @@ tabela_hc3_davi <- tibble(
 tabela_hc3_davi |>
   mutate(p_HC3 = format.pval(p_HC3, digits = 3, eps = 1e-16)) |>
   knitr::kable(digits = 4,
+               col.names = c("Termo", "Coef.", "EP clássico", "EP HC3",
+                             "IC inf.", "IC sup.", "p HC3"),
                caption = "Coeficientes de M2 e inferência HC3 na escala logarítmica")
 ```
 
@@ -953,6 +974,8 @@ sensibilidade_coef_davi <- tibble(
     mudou_sinal = sign(beta_completo) != sign(beta_sensibilidade)
   )
 knitr::kable(sensibilidade_coef_davi, digits = 4,
+             col.names = c("Termo", "Completo", "Sensib.", "Diferença",
+                           "Dif./EP HC3", "Mudou sinal"),
              caption = "Mudanças dos coeficientes de M2 no ajuste de sensibilidade")
 ```
 
@@ -1127,7 +1150,7 @@ knitr::kable(frequencia_selecao,
              caption = "Número de treinos em que cada covariável foi mantida (de 10)")
 ```
 
-O RMSE dos procedimentos varia de CAD `r round(min(cv_res$RMSE))` a CAD `r round(max(cv_res$RMSE))`, com amplitude de CAD `r round(diff(range(cv_res$RMSE)))`. O AIC mantém o completo nos 10 treinos, por isso seus erros coincidem. Pelo BIC, `quartos` permanece em 3 treinos e `area_recreacao` em 2, mostrando que a composição do modelo reduzido depende das casas usadas no ajuste. Nesta partição, o BIC apresenta erro maior; uma única divisão em 10 partes não permite concluir equivalência preditiva nem quantificar a incerteza das diferenças. Como a semente difere da seção 4, pequenas diferenças no RMSE do modelo completo são esperadas.
+O RMSE dos procedimentos varia de CAD `r formatar_cad(min(cv_res$RMSE))` a CAD `r formatar_cad(max(cv_res$RMSE))`, com amplitude de CAD `r formatar_cad(diff(range(cv_res$RMSE)))`. O AIC mantém o completo nos 10 treinos, por isso seus erros coincidem. Pelo BIC, `quartos` permanece em 3 treinos e `area_recreacao` em 2, mostrando que a composição do modelo reduzido depende das casas usadas no ajuste. Nesta partição, o BIC apresenta erro maior; uma única divisão em 10 partes não permite concluir equivalência preditiva nem quantificar a incerteza das diferenças. Como a semente difere da seção 4, pequenas diferenças no RMSE do modelo completo são esperadas.
 
 ## 5.3. Escolha do modelo final
 
@@ -1240,12 +1263,14 @@ tabela_final$p <- format.pval(tabela_final$p, digits = 2, eps = 0.001)
 options(knitr.kable.NA = "-")
 knitr::kable(
   tabela_final[c("termo", "estimativa", "ic_inf", "ic_sup", "p")],
+  row.names = FALSE,
   digits = 3,
   col.names = c("Termo", "Estimativa", "IC inf.", "IC sup.", "p (HC3)"),
   caption = "Coeficientes do modelo final e intervalos HC3 (escala log)"
 )
 knitr::kable(
   tabela_final[usa_pct, c("termo", "efeito_pct", "pct_inf", "pct_sup")],
+  row.names = FALSE,
   digits = 2,
   col.names = c("Termo", "Variação (%)", "IC inf. (%)", "IC sup. (%)"),
   caption = "Associações percentuais com a média geométrica do preço"
