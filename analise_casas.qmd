@@ -466,7 +466,7 @@ summary(modelo_inicial)
 
 O modelo completo explica 67,3% da variabilidade do preço (R² = 0,673; R² ajustado = 0,666). O teste F global testa a hipótese de que todos os coeficientes, exceto o intercepto, são iguais a zero, e ela é rejeitada (F = 99,81 com 11 e 533 graus de liberdade; p \< 2,2e-16). Ou seja, pelo menos uma das covariáveis ajuda a explicar o preço.
 
-O erro padrão residual é de \$15.430 doláres canadenses, que é o tamanho típico do erro do modelo, bastante alto quando comparado à mediana dos preços (cerca de \$62.000). Pelos resíduos, o centro da distribuição é razoavelmente simétrico (1º quartil −9.405, mediana −663 e 3º quartil 7.366), mas os extremos não: o menor resíduo é −41.427 e o maior é 74.900. Isso indica que existem casas com preço muito acima do previsto, o que sugere assimetria à direita e vai ser investigado no diagnóstico.
+O erro padrão residual é de CAD 15.430, que é o tamanho típico do erro do modelo, bastante alto quando comparado à mediana dos preços (cerca de CAD 62.000). Pelos resíduos, o centro da distribuição é razoavelmente simétrico (1º quartil −9.405, mediana −663 e 3º quartil 7.366), mas os extremos não: o menor resíduo é −41.427 e o maior é 74.900. Isso indica que existem casas com preço muito acima do previsto, o que sugere assimetria à direita e vai ser investigado no diagnóstico.
 
 ```{r}
 #| label: tabela-coef
@@ -476,6 +476,8 @@ tidy(modelo_inicial, conf.int = TRUE) |>
 ```
 
 Os fatores têm "não" como categoria de referência, então cada coeficiente de variável binária é a diferença média de preço entre casas que têm a característica e casas que não têm, mantidas as demais variáveis constantes. Já nas quantitativas, é a diferença média associada ao aumento de uma unidade. Com 5% de significância, todas as covariáveis são significativas, exceto `quartos` (p = 0,080).
+
+Os testes de significância apresentados nessa etapa utilizam os erros padrão convencionais do modelo. Como será observado nos diagnósticos, existe evidência de heterocedasticidade, de modo que essas inferências devem ser interpretadas com cautela. A análise com erros padrão robustos será realizada posteriormente.
 
 - `area_lote`: cada m² a mais no lote está associado a um preço médio cerca de CAD 38 maior (IC 95%: 30,75 a 45,57).
 - `banheiros`: cada banheiro a mais está associado a cerca de CAD 14.370 a mais (IC 95%: 11.439 a 17.301), o maior efeito por unidade entre as quantitativas.
@@ -612,7 +614,7 @@ Falhas Sistemáticas (Heterocedasticidade e Não-normalidade): Os resíduos não
 
 Pontos Discrepantes/Influentes: Identificamos várias observações atípicas, com destaque para as linhas 378, 93 e 363 (altos resíduos e maiores alavancagens/Distâncias de Cook).
 
-Sugestão de Ação: A violação conjunta de linearidade, normalidade e variância (frequentemente causada pela métrica original das variáveis) sugere que você deve testar transformações estabilizadoras. Recomenda-se aplicar a transformação de Box-Cox na variável preco (como o logaritmo, comum em valores monetários) para corrigir as falhas sistemáticas antes de remover qualquer outlier.
+Sugestão de Ação: A violação conjunta de linearidade, normalidade e variância sugere que você deve testar transformações estabilizadoras. Recomenda-se aplicar a transformação de Box-Cox na variável preco (como o logaritmo, comum em valores monetários) para corrigir as falhas sistemáticas antes de remover qualquer outlier.
 
 # 4. Problemas e correções
 
@@ -1212,6 +1214,6 @@ Mantendo as demais variáveis constantes:
 
 Todas as variáveis continuam significativas a 5% com os erros padrão robustos. O intercepto não tem interpretação prática, já que não existe uma casa com lote de 1 m² e nenhuma das outras características.
 
-Esses resultados são associações e não efeitos causais. Eles se referem à média geométrica do preço, não à média em dólares, e valem para as casas de Windsor em 1987.
+Esses resultados são associações e não efeitos causais. Eles se referem à média geométrica do preço, não à média em dólares canadenses, e valem para as casas de Windsor em 1987.
 
 # 6. Conclusão
