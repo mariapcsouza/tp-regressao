@@ -690,7 +690,6 @@ Um resíduo studentizado externamente elevado indica um preço pouco compatível
 Adotamos $|t_i|>3$, $h_{ii}>2p/n$, $D_i>4/n$ e $|\mathrm{DFFITS}_i|>2\sqrt{p/n}$ como critérios exploratórios, com $n=545$ e $p=12$ (incluindo o intercepto). Como investigamos muitas casas, esses cortes não devem ser interpretados como testes simultâneos a 5%. A seção 3 usa o teste de Bonferroni para resíduos e o corte de alavancagem $3p/n$; aqui, os cortes mais sensíveis ampliam a triagem para a análise de sensibilidade. As contagens não são diretamente equivalentes.
 
 ```{r}
-#| label: davi-influencia
 diagnosticar <- function(modelo) {
   n <- nobs(modelo)
   p <- modelo$rank
@@ -742,7 +741,6 @@ Ao todo, `r sum(influencia_inicial$investigar)` casas atendem a pelo menos um cr
 As observações tratadas 103, 363 e 93 têm as maiores distâncias de Cook. A observação 378 apresenta o maior resíduo studentizado positivo, mas sua alavancagem é inferior ao corte. Logo, não se deve atribuir alta alavancagem a todas as casas com resíduos elevados. Os dados disponíveis também não permitem afirmar que sejam mansões, erros de registro ou vendas irregulares.
 
 ```{r}
-#| label: davi-grafico-influencia
 #| fig-width: 9
 #| fig-height: 7
 #| fig-cap: "Diagnósticos do modelo inicial; linhas tracejadas indicam os cortes de triagem."
@@ -768,7 +766,6 @@ Mantemos todas as observações nesta etapa: influência é uma propriedade da r
 Como os preços são positivos e o espalhamento dos resíduos cresce com os valores ajustados, investigamos a transformação de Box-Cox da resposta: $(y^\lambda-1)/\lambda$ para $\lambda\ne0$ e $\log(y)$ para $\lambda=0$. O perfil abaixo mantém todas as covariáveis e todas as casas. O intervalo de 95% é aproximado pela razão de verossimilhanças em uma grade de valores.
 
 ```{r}
-#| label: davi-boxcox
 #| fig-cap: "Perfil de Box-Cox do preço, condicionado às covariáveis do modelo inicial."
 boxcox <- MASS::boxcox(
   modelo_inicial, lambda = seq(-0.5, 1, by = 0.01), plotit = FALSE
@@ -790,7 +787,6 @@ O máximo ocorre em $\lambda=$ `r round(lambda, 2)`, com intervalo aproximado \[
 Comparamos três especificações completas: preço na escala original (M0), logaritmo natural do preço (M1) e logaritmos do preço e da área do lote (M2). Em M2, a relação com a área admite retornos proporcionais: um mesmo aumento absoluto do lote pode ter associação diferente com o preço em lotes pequenos e grandes. As demais covariáveis permanecem iguais.
 
 ```{r}
-#| label: davi-modelos-transformados
 stopifnot(all(casas_tratado$preco > 0), all(casas_tratado$area_lote > 0))
 modelo_log_preco <- update(modelo_inicial, log(preco) ~ .)
 modelo_log_preco_area <- update(
@@ -806,7 +802,6 @@ modelos <- list(
 Repetimos os testes de Breusch-Pagan (versão studentizada de `bptest`) e Shapiro-Wilk, juntamente com os diagnósticos de influência. Os testes são complementos dos gráficos; um p-valor maior não demonstra que um pressuposto seja verdadeiro. A alavancagem de M1 é idêntica à de M0 porque depende apenas da matriz de covariáveis; em M2, essa matriz muda.
 
 ```{r}
-#| label: davi-comparacao-diagnosticos
 comparacao_diagnosticos <- purrr::imap_dfr(modelos, function(m, nome) {
   infl <- diagnosticar(m)
   tibble(
@@ -834,7 +829,6 @@ residuos_modelos <- purrr::imap_dfr(modelos, function(m, nome) {
 ```
 
 ```{r}
-#| label: davi-residuos-transformados
 #| fig-width: 10
 #| fig-height: 4
 #| fig-cap: "Resíduos studentizados versus ajustados; M0 em CAD, M1 e M2 em log(CAD)."
@@ -848,7 +842,6 @@ ggplot(residuos_modelos, aes(ajustado, res_student)) +
 ```
 
 ```{r}
-#| label: davi-qq-transformados
 #| fig-width: 10
 #| fig-height: 4
 #| fig-cap: "Comparação dos gráficos quantil-quantil dos resíduos studentizados."
@@ -861,7 +854,6 @@ ggplot(residuos_modelos, aes(sample = res_student)) +
 ```
 
 ```{r}
-#| label: davi-residuos-area
 #| fig-width: 10
 #| fig-height: 4
 #| fig-cap: "Resíduos versus área do lote, para avaliar o padrão associado a essa covariável."
@@ -881,7 +873,6 @@ Nos gráficos de resíduos versus ajustados, a curvatura observada em M0 fica me
 Não comparamos diretamente os $R^2$, erros padrão residuais ou AICs brutos de respostas em escalas diferentes. Para expressar a verossimilhança de M1 e M2 na escala do preço, incluímos o jacobiano da transformação: $\ell_y=\ell_{\log y}-\sum_i\log(y_i)$. Assim, somamos $2\sum_i\log(y_i)$ ao AIC e ao BIC desses modelos. Essa comparação pressupõe os respectivos modelos gaussianos e usa exatamente as mesmas observações.
 
 ```{r}
-#| label: davi-criterios-mesma-escala
 criterios <- purrr::imap_dfr(modelos, function(m, nome) {
   jacobiano <- if (nome == "M0") 0 else 2 * sum(log(casas_tratado$preco))
   tibble(modelo = nome, AIC_preco = AIC(m) + jacobiano,
@@ -894,7 +885,6 @@ knitr::kable(criterios, digits = 2,
 Complementamos com validação cruzada em 10 partes, usando as mesmas partições nos três modelos. Cada casa é prevista por um ajuste que não a utilizou. Nos modelos logarítmicos, usamos $\widehat{y}=\exp(\widehat{\log y})\,\overline{\exp(e)}$, com o fator de retransformação (*smearing*) calculado somente nos dados de treinamento. Esse fator global aproxima a média na escala original, mas pode ser insuficiente se a distribuição dos erros variar com as covariáveis.
 
 ```{r}
-#| label: davi-validacao-cruzada
 set.seed(20261112)
 partes <- sample(rep(seq_len(10), length.out = n))
 comparacao_cv <- purrr::imap_dfr(modelos, function(m, nome) {
@@ -926,7 +916,6 @@ M2 apresenta menor AIC e BIC corrigidos. Na validação cruzada, seu RMSE é CAD
 Como M2 ainda apresenta evidência de variância não constante, calculamos erros padrão HC3, que ajustam a matriz de covariância levando em conta os resíduos e a alavancagem. Os coeficientes e valores ajustados permanecem iguais. Os intervalos e testes abaixo usam a distribuição t com os graus de liberdade residuais como aproximação; HC3 não corrige a forma da média, não torna os resíduos normais e não elimina eventual dependência entre casas.
 
 ```{r}
-#| label: davi-inferencia-hc3
 cov_hc3 <- car::hccm(modelo_log_preco_area, type = "hc3")
 ep_hc3 <- sqrt(diag(cov_hc3))
 gl <- df.residual(modelo_log_preco_area)
@@ -956,7 +945,6 @@ Em M2, os intervalos HC3 das covariáveis permanecem inteiramente positivos a 95
 Recalculamos a influência em M2 e retiramos, **somente em um ajuste de sensibilidade**, as casas que ultrapassam o corte de Cook ou de DFFITS. Essa retirada conjunta é uma perturbação exploratória da amostra: os mesmos dados foram usados para identificar e retirar os casos. Por isso, não interpretamos um eventual ajuste melhor como justificativa para eliminá-los, nem comparamos AICs de amostras diferentes.
 
 ```{r}
-#| label: davi-sensibilidade
 influencia_m2 <- bind_cols(id_casas, diagnosticar(modelo_log_preco_area))
 retirar <- influencia_m2$cook_alto | influencia_m2$dffits_alto
 modelo_sensibilidade <- update(
@@ -989,7 +977,6 @@ knitr::kable(sensibilidade_coef, digits = 4,
 Foram retiradas `r sum(retirar)` casas neste exercício, restando `r nobs(modelo_sensibilidade)` observações. As linhas originais sinalizadas são: `r paste(influencia_m2$linha_original[retirar], collapse = ", ")`. As diferenças da tabela são expressas também em unidades do erro padrão robusto do ajuste completo, permitindo comparar coeficientes de escalas distintas; essa razão não é um teste de hipótese.
 
 ```{r}
-#| label: davi-resumo-sensibilidade
 sensibilidade_covariaveis <- sensibilidade_coef |>
   filter(termo != "(Intercept)") |>
   arrange(desc(abs(diferenca_em_EP_HC3)))
@@ -1011,7 +998,6 @@ Entre as covariáveis, `r sum(sensibilidade_covariaveis$mudou_sinal)` coeficient
 Não encontramos multicolinearidade acentuada no modelo inicial. As transformações melhoraram os diagnósticos e o desempenho preditivo nesta comparação, mas permaneceram desvios de normalidade e evidência de heterocedasticidade. Assim, recomendamos **M2 com todas as 545 casas como modelo completo candidato** para a próxima etapa, mantendo os erros padrão HC3 como referência complementar para a inferência. A análise de sensibilidade não substitui esse ajuste.
 
 ```{r}
-#| label: davi-modelo-candidato
 modelo_candidato <- modelo_log_preco_area
 vif_m2 <- car::vif(modelo_candidato)
 ```
@@ -1212,7 +1198,7 @@ O centro da distribuição acompanha a reta melhor do que no modelo inicial, mas
 
 ```{r}
 #| label: diag-final-testes
-bp <- bptest(modelo_final)
+bp <- lmtest::bptest(modelo_final)
 sw <- shapiro.test(residuals(modelo_final))
 vif_final <- car::vif(modelo_final)
 
@@ -1238,7 +1224,7 @@ knitr::kable(resumo_influencia_final,
 - **Normalidade:** o Shapiro-Wilk deu p = `r signif(sw$p.value, 3)` e W = `r round(unname(sw$statistic), 3)`, rejeitando a normalidade a 5%. O tamanho da amostra torna o teste sensível, mas não permite desconsiderar o resultado; os desvios nas caudas permanecem uma limitação.
 - **Multicolinearidade:** o maior VIF foi `r round(max(vif_final), 2)`, bem abaixo de 5.
 - **Pontos influentes:** `r sum(cook > 4 / n)` casas passaram do corte de $4/n$ e a maior distância de Cook foi `r round(max(cook), 3)`. Cook abaixo de 1 não descarta influência. Como o modelo final é o mesmo M2 da seção 4, aplica-se a análise de sensibilidade já realizada: retirar conjuntamente as 33 casas sinalizadas por Cook ou DFFITS não mudou os sinais, com mudança mediana das previsões de aproximadamente 0,89%. Mantemos todas as casas por não haver evidência de erro de registro, reconhecendo a sensibilidade das magnitudes dos coeficientes.
-- **Independência:** como na seção 3, os dados são de corte transversal e não temos informação de localização ou de ordem das vendas, então não foi possível testar esse pressuposto.
+- **Independência:** Assim como observado na seção 3, os dados são de corte transversal sem informação de localização ou de data das vendas, o que impede investigar adequadamente a causa da autocorrelação observada na ordem original do arquivo. Portanto, esse pressuposto permanece como limitação.
 
 Como o teste de Breusch-Pagan ainda rejeitou a 5%, usamos erros padrão robustos HC3 nos intervalos e testes da próxima seção. HC3 corrige a estimativa da covariância sob heterocedasticidade, mas não resolve possível dependência, erro de especificação ou a incerteza introduzida pela seleção de modelos.
 
