@@ -576,7 +576,7 @@ O teste de Breusch-Pagan ($p = 4{,}314 \times 10^{-9}$) confirma estatisticament
 qqPlot(modelo_inicial, id = FALSE)
 ```
 
-Normalidade No gráfico QQ-plot, caso a normalidade fosse atendida, os pontos deveriam repousar sobre a reta teórica. Observa-se um forte desvio na cauda superior, refletindo casas com preços reais muito superiores ao previsto pelo modelo. O teste de Shapiro-Wilk ($p = 1.871e-11$) rejeita a hipótese nula, confirmando a não normalidade dos resíduos.
+No gráfico QQ-plot, caso a normalidade fosse atendida, os pontos deveriam repousar sobre a reta teórica. Observa-se um forte desvio na cauda superior, refletindo casas com preços reais muito superiores ao previsto pelo modelo. O teste de Shapiro-Wilk ($p = 1.871e-11$) rejeita a hipótese nula, confirmando a não normalidade dos resíduos.
 
 ```{r}
 #| label: shapiro
@@ -590,7 +590,9 @@ lmtest::dwtest(modelo_inicial)
 car::durbinWatsonTest(modelo_inicial)
 ```
 
-Os registros são de casas diferentes vendidas em Windsor em 1987, então não esperamos autocorrelação temporal no sentido usual. Mesmo assim, o banco vem numa ordem específica (a correlação entre o número da linha e o preço é 0,38, então as linhas não estão em ordem aleatória), e por isso aplicamos o teste de Durbin-Watson aos resíduos nessa ordem. A estatística foi DW = 1,60 (autocorrelação de lag 1 estimada em cerca de 0,20, p \[conferir\]), o que rejeita a hipótese de erros não correlacionados. Não sabemos o que a ordem das linhas representa (pode ser data de venda, região ou outro critério do arquivo original), então não dá para atribuir uma causa. De qualquer forma, a independência dos erros não pode ser simplesmente assumida pelo desenho do estudo. Erros positivamente correlacionados tendem a deixar os erros padrão subestimados, então os p-valores e intervalos de confiança podem ser otimistas. Mantemos esse ponto como limitação.
+Os registros são de casas diferentes vendidas em Windsor em 1987, então não esperamos autocorrelação temporal no sentido usual. Mesmo assim, o banco vem numa ordem específica (a correlação entre o número da linha e o preço é 0,38, então as linhas não estão em ordem aleatória), e por isso aplicamos o teste de Durbin-Watson aos resíduos nessa ordem. 
+
+O teste retornou uma estatística DW = 1{,}60, com autocorrelação de lag 1 estimada em cerca de 0,20 e p-valor muito baixo, o que rejeita a hipótese de erros não correlacionados. Como o banco não informa o que a ordem das linhas representa (pode ser data de venda, região ou outro critério da coleta), não conseguimos apontar a causa exata dessa dependência. Ainda assim, isso mostra que não podemos simplesmente assumir independência pelo desenho do estudo: erros positivamente correlacionados tendem a subestimar os erros padrão, deixando os p-valores e intervalos de confiança mais otimistas do que deveriam. Por isso, mantemos esse ponto como uma limitação da análise. 
 
 **Observações que chamam atenção**
 
@@ -620,10 +622,12 @@ Pelos critérios do material do curso, um ponto é inconsistente se o módulo do
 
 Quanto à influência, nenhuma distância de Cook chega perto do corte F(0,5; 12; 533) ≈ 0,95 (a maior é 0,046) e nenhum \|DFBETAS\| passa de 1 (o maior é 0,61). Já 14 casas passam do corte do DFFITS e 28 do COVRATIO, então algumas casas têm influência moderada, mas nenhuma muda sozinha o ajuste de forma drástica. Os dados não explicam por que esses preços fogem do padrão (pode ser acabamento, venda atípica ou alguma variável que não está no banco), então não tiramos conclusão sobre isso.
 
+**Multicolinearidade**
+
 ```{r}
-#| label: vif-rapido
 vif(modelo_inicial)
 ```
+Todos os fatores de inflação da variância (VIF) ficaram bem próximos de 1 — variando de 1,04 (aquecimento_gas) a 1,48 (andares) —, muito abaixo do limite de referência de 10 que sinalizaria problemas de multicolinearidade. Isso indica que, embora existam correlações moderadas entre algumas características das casas, não há dependência linear forte entre as covariáveis que comprometa a estimação dos coeficientes.
 
 ### 3.4 Resumo dos problemas encontrados
 
