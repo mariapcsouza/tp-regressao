@@ -45,10 +45,9 @@ editor: visual
 library(tidyverse)
 library(car)
 library(broom)
-# adicionar mais aqui se necessário
 
 # Leitura dos dados originais:
-casas <- read.csv("dados/casas.csv")
+casas <- read.csv("dados/casas.csv", encoding = "UTF-8")
 ```
 
 ## 1.2. Estrutura do banco de dados
@@ -105,7 +104,7 @@ which(duplicated(casas) | duplicated(casas, fromLast = TRUE))
 casas[duplicated(casas) | duplicated(casas, fromLast = TRUE), ]
 ```
 
-As linhas 318 e 535 são iguais. Optaremos, portanto, pela remoção da segunda ocorrência (linha 535), mantendo uma única linha, visto que a repetição em todas as variáveis, inclusive no preço, faria a mesma informação de 1 imóvel contar duas vezes. O impacto sobre as estimativas é pequeno, então a escolha não altera as conclusões.
+As linhas 318 e 535 (contadas a partir da primeira casa, sem o cabeçalho do CSV) são iguais em todas as variáveis, inclusive no preço. Tratamos essa repetição como um provável registro duplicado e optamos por remover a segunda ocorrência (linha 535), mantendo uma única linha, para que a informação de um mesmo imóvel não seja contada duas vezes. Como é apenas 1 casa em 546, o impacto esperado sobre as estimativas é pequeno.
 
 ```{r}
 # Remove linha duplicada
@@ -581,8 +580,7 @@ lmtest::dwtest(modelo_inicial)
 car::durbinWatsonTest(modelo_inicial)
 ```
 
-Os registros são de casas diferentes vendidas em Windsor em 1987, então não esperamos autocorrelação temporal no sentido usual. Mesmo assim, o banco vem numa ordem específica (a correlação entre o número da linha e o preço é 0,38, então as linhas não estão em ordem aleatória), e por isso aplicamos o teste de Durbin-Watson aos resíduos nessa ordem. A estatística foi DW = 1,60 (autocorrelação de lag 1 estimada em cerca de 0,20, p [conferir]), o que rejeita a hipótese de erros não correlacionados. Não sabemos o que a ordem das linhas representa (pode ser data de venda, região ou outro critério do arquivo original), então não dá para atribuir uma causa. De qualquer forma, a independência dos erros não pode ser simplesmente assumida pelo desenho do estudo. Erros positivamente correlacionados tendem a deixar os erros padrão subestimados, então os p-valores e intervalos de confiança podem ser otimistas. Mantemos esse ponto como limitação.
-
+Os registros são de casas diferentes vendidas em Windsor em 1987, então não esperamos autocorrelação temporal no sentido usual. Mesmo assim, o banco vem numa ordem específica (a correlação entre o número da linha e o preço é 0,38, então as linhas não estão em ordem aleatória), e por isso aplicamos o teste de Durbin-Watson aos resíduos nessa ordem. A estatística foi DW = 1,60 (autocorrelação de lag 1 estimada em cerca de 0,20, p \[conferir\]), o que rejeita a hipótese de erros não correlacionados. Não sabemos o que a ordem das linhas representa (pode ser data de venda, região ou outro critério do arquivo original), então não dá para atribuir uma causa. De qualquer forma, a independência dos erros não pode ser simplesmente assumida pelo desenho do estudo. Erros positivamente correlacionados tendem a deixar os erros padrão subestimados, então os p-valores e intervalos de confiança podem ser otimistas. Mantemos esse ponto como limitação.
 
 **Observações que chamam atenção**
 
@@ -607,9 +605,10 @@ car::outlierTest(modelo_inicial)
 diag |> arrange(desc(.cooksd)) |> slice_head(n = 10) |>
   select(obs, preco, res_stud, .hat, .cooksd) |> knitr::kable(digits = 3)
 ```
+
 Pelos critérios do material do curso, um ponto é inconsistente se o módulo do resíduo studentizado passa de t(α/2n; n−p−1). Com α = 0,05, n = 545 e p = 12, esse valor é cerca de 3,94, e três casas passam dele: 378 (5,01), 93 (4,56) e 363 (4,44), todas com p-valor de Bonferroni abaixo de 5% (0,0004; 0,003 e 0,006). São casas caras (CAD 190.000, 163.000 e 175.000), vendidas por muito mais do que o modelo previa. Porém têm alavancagem baixa (0,020, 0,027 e 0,028, contra o corte 3p/n = 0,066), então são outliers, e não pontos de alavanca. Nenhuma casa tem, ao mesmo tempo, resíduo inconsistente e alavancagem alta.
 
-Quanto à influência, nenhuma distância de Cook chega perto do corte F(0,5; 12; 533) ≈ 0,95 (a maior é 0,046) e nenhum |DFBETAS| passa de 1 (o maior é 0,61). Já 14 casas passam do corte do DFFITS e 28 do COVRATIO, então algumas casas têm influência moderada, mas nenhuma muda sozinha o ajuste de forma drástica. Os dados não explicam por que esses preços fogem do padrão (pode ser acabamento, venda atípica ou alguma variável que não está no banco), então não tiramos conclusão sobre isso.
+Quanto à influência, nenhuma distância de Cook chega perto do corte F(0,5; 12; 533) ≈ 0,95 (a maior é 0,046) e nenhum \|DFBETAS\| passa de 1 (o maior é 0,61). Já 14 casas passam do corte do DFFITS e 28 do COVRATIO, então algumas casas têm influência moderada, mas nenhuma muda sozinha o ajuste de forma drástica. Os dados não explicam por que esses preços fogem do padrão (pode ser acabamento, venda atípica ou alguma variável que não está no banco), então não tiramos conclusão sobre isso.
 
 ```{r}
 #| label: vif-rapido
