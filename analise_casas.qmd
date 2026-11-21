@@ -107,8 +107,6 @@ casas[duplicated(casas) | duplicated(casas, fromLast = TRUE), ]
 
 As linhas 318 e 535 são iguais. Optaremos, portanto, pela remoção da segunda ocorrência (linha 535), mantendo uma única linha, visto que a repetição em todas as variáveis, inclusive no preço, faria a mesma informação de 1 imóvel contar duas vezes. O impacto sobre as estimativas é pequeno, então a escolha não altera as conclusões.
 
-# Calcular depois certinho
-
 ```{r}
 # Remove linha duplicada
 casas <- casas %>%
@@ -1294,3 +1292,13 @@ Todas as covariáveis apresentam p-valores individuais inferiores a 5% com HC3, 
 Esses resultados são associações e não efeitos causais. Eles se referem à média geométrica do preço em CAD, não à média aritmética, e valem para as casas de Windsor em 1987.
 
 # 6. Conclusão
+
+A análise das 545 casas, após a remoção de uma ocorrência duplicada, mostrou uma distribuição de preços assimétrica à direita e associações entre o preço e as características dos imóveis. O modelo linear na escala original apresentou curvatura nos resíduos, heterocedasticidade e desvios de normalidade. A multicolinearidade não foi acentuada, com VIF máximo próximo de 1,48, e os diagnósticos de influência motivaram uma análise de sensibilidade, sem exclusão automática de casas.
+
+O modelo com logaritmos do preço e da área do lote melhorou o comportamento dos resíduos e apresentou menor erro de validação cruzada que o modelo na escala original. Na seleção de covariáveis, o AIC manteve o modelo completo, enquanto o BIC retirou `quartos` e `area_recreacao`. Optamos pelo completo, com as 11 covariáveis, considerando o objetivo de interpretar as associações, o apoio exploratório do teste conjunto HC3 e o desempenho preditivo observado. O R² foi de aproximadamente 0,687 e o R² ajustado de 0,680, ambos relativos ao log do preço, e não ao preço em CAD.
+
+Mantidas as demais características constantes, todas as associações estimadas foram positivas. Por exemplo, um lote 10% maior se associou a uma média geométrica do preço aproximadamente 2,93% maior; um banheiro adicional, a cerca de 18% a mais; e a localização em área preferencial, a aproximadamente 14% a mais. Essas associações não demonstram causalidade nem devem ser extrapoladas automaticamente para outros mercados ou períodos.
+
+Na validação cruzada da seção 5, com a seleção refeita dentro de cada treino, o modelo completo e o procedimento AIC apresentaram RMSE de aproximadamente CAD 15.188 e MAE de CAD 11.046. O procedimento BIC apresentou RMSE de CAD 15.383. A diferença observada em uma única partição não estabelece superioridade definitiva, e os erros mostram que ainda existe variabilidade relevante dos preços não explicada pelas características disponíveis. A avaliação também permanece condicionada às transformações escolhidas anteriormente na base completa.
+
+As transformações não eliminaram todas as limitações: os testes ainda indicaram heterocedasticidade e desvios de normalidade, e não foi possível verificar adequadamente a independência dos erros com as informações disponíveis. Por isso, utilizamos erros padrão HC3 e interpretamos os testes e intervalos de forma exploratória, reconhecendo que não incorporam a incerteza da seleção. A análise de sensibilidade preservou os sinais dos coeficientes, mas não demonstrou ausência de influência sobre suas magnitudes. O modelo final fornece, portanto, uma descrição útil das associações nesta amostra de Windsor em 1987, com limitações que devem acompanhar qualquer interpretação ou previsão.
