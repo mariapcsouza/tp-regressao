@@ -18,6 +18,18 @@ format:
     theme: cosmo
     df-print: kable
     fig-align: center
+  pdf:
+    pdf-engine: lualatex
+    toc: true
+    toc-depth: 3
+    toc-title: "Sumário"
+    fig-align: center
+    code-block-font-size: "\\scriptsize"
+    include-in-header:
+      text: |
+        \usepackage{fvextra}
+        \fvset{breaklines=true,breakanywhere=true}
+        \DefineVerbatimEnvironment{verbatim}{Verbatim}{breaklines=true,breakanywhere=true,fontsize=\footnotesize}
 execute:
   echo: true
   message: false
@@ -48,7 +60,7 @@ glimpse(casas)
 
 O banco de dados tem 546 linhas e 12 colunas. As variáveis podem ser classificadas como:
 
-- **Variável resposta (`<dbl>`):** `preco` (preço de venda do imóvel, variável quantitativa contínua expressa em dólares canadenses).
+- **Variável resposta (`<dbl>`):** `preco` (preço de venda do imóvel, variável quantitativa contínua expressa em CAD).
 - **Covariável quantitativa contínua (`<dbl>`):** `area_lote` (área total do lote do imóvel, em $m^2$).
 - **Covariáveis quantitativas discretas (`<int>`):** `quartos`, `banheiros`, `andares` e `vagas_garagem`(contagem de cada item).
 - **Covariáveis qualitativas binárias (`<chr>`: "sim"/"não"):** `entrada_carro`, `area_recreacao`, `porao`, `aquecimento_gas`, `ar_condicionado` e `area_preferencial`(presença ou ausência do atributo).
@@ -94,8 +106,6 @@ casas[duplicated(casas) | duplicated(casas, fromLast = TRUE), ]
 ```
 
 As linhas 318 e 535 são iguais. Optaremos, portanto, pela remoção da segunda ocorrência (linha 535), mantendo uma única linha, visto que a repetição em todas as variáveis, inclusive no preço, faria a mesma informação de 1 imóvel contar duas vezes. O impacto sobre as estimativas é pequeno, então a escolha não altera as conclusões.
-
-# Calcular depois certinho
 
 ```{r}
 # Remove linha duplicada
@@ -259,7 +269,7 @@ ggplot(casas_tratado, aes(x = preco)) +
   ) +
   labs(
     title = "Distribuição dos preços dos imóveis",
-    x = "Preço (dólares canadenses)",
+    x = "Preço (CAD)",
     y = "Frequência"
   ) +
   theme_minimal()
@@ -276,7 +286,7 @@ ggplot(casas_tratado, aes(x = "", y = preco)) +
   labs(
     title = "Boxplot dos preços dos imóveis",
     x = NULL,
-    y = "Preço (dólares canadenses)"
+    y = "Preço (CAD)"
   ) +
   theme_minimal()
 ```
@@ -316,7 +326,7 @@ ggplot(
   labs(
     title = "Distribuição dos preços por características da propriedade",
     x = "Categoria",
-    y = "Preço (dólares canadenses)"
+    y = "Preço (CAD)"
   ) +
   theme_minimal() +
   theme(
@@ -352,7 +362,7 @@ ggplot(
   labs(
     title = "Distribuição dos preços por localização",
     x = "Área preferencial",
-    y = "Preço (dólares canadenses)"
+    y = "Preço (CAD)"
   ) +
   theme_minimal() +
   theme(
@@ -428,7 +438,7 @@ ggplot(
   labs(
     title = "Relação entre preço e variáveis quantitativas",
     x = "Valor da variável",
-    y = "Preço (dólares canadenses)"
+    y = "Preço (CAD)"
   ) +
   theme_minimal()
 ```
@@ -526,7 +536,7 @@ ggplot(diag, aes(.fitted, res_stud)) +
   geom_point(alpha = .5) +
   geom_hline(yintercept = 0, linetype = "dashed") +
   geom_smooth(se = FALSE) +
-  labs(x = "Valores ajustados", y = "Resíduo studentizado")
+  labs(x = "Valores ajustados (CAD)", y = "Resíduo studentizado")
 ```
 
 Para que os pressupostos sejam atendidos, o gráfico de resíduos versus valores ajustados deve apresentar um padrão completamente aleatório e disperso em torno de zero. No entanto, o gráfico revela duas violações: há uma evidente tendência curvilínea na linha de suavização (indicando não linearidade) e o espalhamento dos resíduos aumenta conforme o preço ajustado cresce, formando um padrão de "funil". O teste de Breusch-Pagan ($p = 4.314e-09$) confirma estatisticamente a rejeição da hipótese nula de variância constante, atestando a heterocedasticidade.
@@ -659,13 +669,16 @@ id_casas_davi <- tibble(
 )
 n_davi <- nobs(modelo_inicial)
 p_davi <- modelo_inicial$rank # Inclui o intercepto.
+formatar_cad <- function(x, digitos = 0) {
+  formatC(x, format = "f", digits = digitos, big.mark = ".", decimal.mark = ",")
+}
 ```
 
 ## 4.2. Resíduos atípicos, alavancagem e influência
 
 Um resíduo studentizado externamente elevado indica um preço pouco compatível com as características observadas. A alavancagem identifica combinações incomuns de covariáveis, independentemente do preço. Já Cook e DFFITS avaliam quanto a retirada de uma casa altera o ajuste. Portanto, uma casa pode ter alto resíduo sem apresentar alta alavancagem.
 
-Adotamos $|t_i|>3$, $h_{ii}>2p/n$, $D_i>4/n$ e $|\mathrm{DFFITS}_i|>2\sqrt{p/n}$ como critérios exploratórios, com $n=545$ e $p=12$ (incluindo o intercepto). Como investigamos muitas casas, esses cortes não devem ser interpretados como testes simultâneos a 5%.
+Adotamos $|t_i|>3$, $h_{ii}>2p/n$, $D_i>4/n$ e $|\mathrm{DFFITS}_i|>2\sqrt{p/n}$ como critérios exploratórios, com $n=545$ e $p=12$ (incluindo o intercepto). Como investigamos muitas casas, esses cortes não devem ser interpretados como testes simultâneos a 5%. A seção 3 usa o teste de Bonferroni para resíduos e o corte de alavancagem $3p/n$; aqui, os cortes mais sensíveis ampliam a triagem para a análise de sensibilidade. As contagens não são diretamente equivalentes.
 
 ```{r}
 #| label: davi-influencia
@@ -709,7 +722,10 @@ influencia_inicial_davi |>
   arrange(desc(cook)) |>
   slice_head(n = 10) |>
   select(obs_tratada, linha_original, preco, res_student, alavancagem, cook, dffits) |>
-  knitr::kable(digits = 3, caption = "Dez casas com maior distância de Cook")
+  knitr::kable(digits = 3,
+               col.names = c("Obs. tratada", "Linha original", "Preço (CAD)",
+                             "Res. student.", "Alavancagem", "Cook", "DFFITS"),
+               caption = "Dez casas com maior distância de Cook")
 ```
 
 Ao todo, `r sum(influencia_inicial_davi$investigar)` casas atendem a pelo menos um critério; as contagens da tabela se sobrepõem. Há `r sum(influencia_inicial_davi$residuo_alto)` resíduos com módulo superior a 3 e `r sum(influencia_inicial_davi$cook_alto)` distâncias de Cook acima de $4/n$. Nenhuma distância de Cook ultrapassa 1, mas isso não elimina a necessidade de avaliar sensibilidade.
@@ -796,7 +812,11 @@ comparacao_diagnosticos_davi <- purrr::imap_dfr(modelos_davi, function(m, nome) 
 })
 comparacao_diagnosticos_davi |>
   mutate(across(starts_with("p_"), ~ format.pval(.x, digits = 3, eps = 1e-16))) |>
-  knitr::kable(caption = "Diagnósticos nas três especificações completas")
+  knitr::kable(
+    col.names = c("Modelo", "p BP", "p Shapiro", "Resíduos", "Alavancagem",
+                  "Cook", "DFFITS"),
+    caption = "Diagnósticos nas três especificações completas (contagens acima dos cortes)"
+  )
 
 residuos_modelos_davi <- purrr::imap_dfr(modelos_davi, function(m, nome) {
   tibble(modelo = nome, ajustado = fitted(m), res_student = rstudent(m),
@@ -859,7 +879,7 @@ criterios_davi <- purrr::imap_dfr(modelos_davi, function(m, nome) {
          BIC_preco = BIC(m) + jacobiano)
 })
 knitr::kable(criterios_davi, digits = 2,
-             caption = "Critérios de informação na escala original do preço")
+             caption = "Critérios de informação na escala original do preço (CAD)")
 ```
 
 Complementamos com validação cruzada em 10 partes, usando as mesmas partições nos três modelos. Cada casa é prevista por um ajuste que não a utilizou. Nos modelos logarítmicos, usamos $\widehat{y}=\exp(\widehat{\log y})\,\overline{\exp(e)}$, com o fator de retransformação (*smearing*) calculado somente nos dados de treinamento. Esse fator global aproxima a média na escala original, mas pode ser insuficiente se a distribuição dos erros variar com as covariáveis.
@@ -888,7 +908,7 @@ knitr::kable(comparacao_cv_davi, digits = 2,
              caption = "Erros de validação cruzada na escala do preço (CAD)")
 ```
 
-M2 apresenta menor AIC e BIC corrigidos. Na validação cruzada, seu RMSE é CAD `r round(comparacao_cv_davi$RMSE_CAD[3], 2)`, frente a CAD `r round(comparacao_cv_davi$RMSE_CAD[1], 2)` em M0. O MAE informa o erro absoluto médio e é menos sensível a erros extremos do que o RMSE. Esta é uma comparação exploratória com uma partição aleatória; não fornece incerteza sobre a diferença entre modelos nem substitui a validação da seleção que será feita na seção 5.
+M2 apresenta menor AIC e BIC corrigidos. Na validação cruzada, seu RMSE é CAD `r formatar_cad(comparacao_cv_davi$RMSE_CAD[3], 2)`, frente a CAD `r formatar_cad(comparacao_cv_davi$RMSE_CAD[1], 2)` em M0. O MAE informa o erro absoluto médio e é menos sensível a erros extremos do que o RMSE. Esta é uma comparação exploratória com uma partição aleatória; não fornece incerteza sobre a diferença entre modelos nem substitui a validação da seleção que será feita na seção 5.
 
 ## 4.4. Inferência robusta e sensibilidade às casas influentes
 
@@ -915,6 +935,8 @@ tabela_hc3_davi <- tibble(
 tabela_hc3_davi |>
   mutate(p_HC3 = format.pval(p_HC3, digits = 3, eps = 1e-16)) |>
   knitr::kable(digits = 4,
+               col.names = c("Termo", "Coef.", "EP clássico", "EP HC3",
+                             "IC inf.", "IC sup.", "p HC3"),
                caption = "Coeficientes de M2 e inferência HC3 na escala logarítmica")
 ```
 
@@ -950,6 +972,8 @@ sensibilidade_coef_davi <- tibble(
     mudou_sinal = sign(beta_completo) != sign(beta_sensibilidade)
   )
 knitr::kable(sensibilidade_coef_davi, digits = 4,
+             col.names = c("Termo", "Completo", "Sensib.", "Diferença",
+                           "Dif./EP HC3", "Mudou sinal"),
              caption = "Mudanças dos coeficientes de M2 no ajuste de sensibilidade")
 ```
 
@@ -1005,8 +1029,11 @@ modelo_completo <- lm(
 n <- nobs(modelo_completo)
 
 # stepwise nos dois sentidos, pelo AIC e pelo BIC (k = log(n))
-modelo_aic <- step(modelo_completo, direction = "both", trace = 0)
-modelo_bic <- step(modelo_completo, direction = "both", k = log(n), trace = 0)
+escopo_selecao <- list(lower = ~ 1, upper = formula(modelo_completo))
+modelo_aic <- step(modelo_completo, scope = escopo_selecao,
+                   direction = "both", trace = 0)
+modelo_bic <- step(modelo_completo, scope = escopo_selecao,
+                   direction = "both", k = log(n), trace = 0)
 
 # passos que cada critério deu
 modelo_aic$anova
@@ -1015,7 +1042,7 @@ modelo_bic$anova
 
 Usamos o método stepwise, que testa retirar e recolocar variáveis uma de cada vez, mantendo o modelo com o menor valor do critério. Aplicamos com dois critérios: o AIC e o BIC. Os dois medem o equilíbrio entre ajuste e número de variáveis, mas o BIC penaliza mais os modelos com muitas variáveis, então tende a escolher modelos menores.
 
-Pelo AIC, nenhuma variável foi retirada: o menor valor foi o do próprio modelo completo, com as 11 variáveis. Pelo BIC, foram retiradas `area_recreacao` e `quartos`, nessa ordem, e o modelo ficou com 9 variáveis. Essas duas já eram as que tinham os menores efeitos no modelo completo.
+Pelo AIC, nenhuma variável foi retirada: o critério não melhorou com as remoções avaliadas, mantendo as 11 covariáveis. Pelo BIC, foram retiradas `area_recreacao` e `quartos`, nessa ordem, e o modelo ficou com 9 covariáveis. Essas duas apresentavam evidência individual mais fraca pelos testes t no modelo completo. Não comparamos a importância das covariáveis apenas pela magnitude dos coeficientes, pois suas escalas diferem. O stepwise realiza uma busca local e não garante o melhor subconjunto entre todas as combinações possíveis.
 
 Com isso temos dois candidatos: o modelo completo, escolhido pelo AIC, e o modelo reduzido, escolhido pelo BIC. Também vamos considerar um modelo intermediário, que é o completo sem `area_recreacao`. Eles são comparados na próxima seção.
 
@@ -1049,19 +1076,26 @@ knitr::kable(
 )
 ```
 
-O número de coeficientes inclui o intercepto. O AIC e o BIC desta tabela têm valores diferentes dos mostrados no `step()`, porque o `step()` usa uma constante diferente no cálculo. Por isso só comparamos os modelos dentro da mesma tabela. O AIC prefere o modelo completo e o BIC prefere o reduzido. O R² ajustado é quase igual nos três, então não ajuda a escolher.
+O número de coeficientes inclui o intercepto. Todos os modelos usam as mesmas 545 casas e a resposta em log(CAD), permitindo comparar diretamente seus critérios. Os valores diferem dos exibidos pelo `step()` por uma constante aditiva comum, que não altera as diferenças nem a ordenação dos modelos. Também diferem dos critérios corrigidos para a escala CAD na seção 4. O AIC prefere o modelo completo e o BIC prefere o reduzido. As diferenças de R² ajustado são pequenas e, isoladamente, não resolvem a escolha. Como permanece heterocedasticidade, tratamos os critérios gaussianos como instrumentos de comparação, em conjunto com a validação preditiva e a inferência robusta.
 
-Como o reduzido é um caso particular do completo, também podemos usar o teste F para ver se as duas variáveis retiradas (`quartos` e `area_recreacao`) melhoram o ajuste.
+Como o reduzido está contido no completo, avaliamos conjuntamente os coeficientes de `quartos` e `area_recreacao`. Exibimos o teste F clássico como referência e um teste de Wald com covariância HC3 e aproximação F, pois o diagnóstico anterior indica heterocedasticidade.
 
 ```{r}
 #| label: teste-f
 teste_f <- anova(modelo_bic, modelo_completo)
+teste_conjunto_hc3 <- car::linearHypothesis(
+  modelo_completo, c("quartos = 0", "area_recreacaosim = 0"),
+  vcov. = car::hccm(modelo_completo, type = "hc3"), test = "F"
+)
 teste_f
+teste_conjunto_hc3
 ```
 
-O p-valor do teste é `r signif(teste_f$"Pr(>F)"[2], 3)`, então há evidência de que as duas variáveis, juntas, ajudam a explicar o preço, mesmo com efeito pequeno.
+O teste clássico tem p = `r signif(teste_f$"Pr(>F)"[2], 3)` e o teste conjunto HC3 tem p = `r signif(teste_conjunto_hc3$"Pr(>F)"[2], 3)`. O resultado robusto fornece evidência contra a hipótese de que ambos os coeficientes sejam zero, a 5%. Isso não mede a importância prática dos efeitos. Além disso, as hipóteses foram examinadas após uma seleção nos mesmos dados: esses p-valores são exploratórios, sem correção pela busca de modelos.
 
-Para ver o desempenho na previsão, usamos validação cruzada com 10 partes. Cada casa é prevista por um modelo ajustado sem ela. Como o modelo usa o log do preço, voltamos para a escala original com `exp()` e multiplicamos por um fator de correção (a média de `exp()` dos resíduos do treino), igual ao que foi feito na seção 4.
+Para avaliar a previsão, usamos as mesmas 10 partições para três procedimentos: manter o modelo completo, selecionar por AIC e selecionar por BIC. A seleção é refeita exclusivamente no treino de cada rodada, inclusive a penalização BIC com o tamanho do treino. Assim, a resposta das casas de teste não participa da escolha das covariáveis. O modelo intermediário serve à comparação dos ajustes na tabela anterior; não constitui um quarto procedimento de seleção.
+
+Voltamos à escala CAD com `exp()` e o fator de retransformação calculado apenas nos resíduos do treino, como na seção 4. A transformação logarítmica já foi escolhida na análise anterior da base completa: esta avaliação incorpora a seleção de covariáveis, mas não toda a escolha da forma funcional. Continua sendo uma validação interna exploratória.
 
 ```{r}
 #| label: validacao-cruzada-final
@@ -1069,37 +1103,60 @@ set.seed(20261114)
 n <- nrow(casas_tratado)
 partes <- sample(rep(1:10, length.out = n))
 
-formulas <- lapply(modelos, formula)
+procedimentos <- c("Completo", "Stepwise AIC", "Stepwise BIC")
+termos_completos <- attr(terms(modelo_completo), "term.labels")
 
-cv <- lapply(names(formulas), function(nome) {
+cv <- lapply(procedimentos, function(nome) {
   prev <- rep(NA_real_, n)
+  inclusao <- matrix(FALSE, nrow = 10, ncol = length(termos_completos),
+                     dimnames = list(NULL, termos_completos))
   for (k in 1:10) {
     treino <- casas_tratado[partes != k, ]
     teste  <- casas_tratado[partes == k, ]
-    ajuste <- lm(formulas[[nome]], data = treino)
+    formula_treino <- formula(modelo_completo)
+    environment(formula_treino) <- environment()
+    ajuste <- lm(formula_treino, data = treino)
+    if (nome != "Completo") {
+      penalidade <- if (nome == "Stepwise AIC") 2 else log(nrow(treino))
+      ajuste <- step(ajuste, scope = escopo_selecao, direction = "both",
+                     k = penalidade, trace = 0)
+    }
+    inclusao[k, ] <- termos_completos %in% attr(terms(ajuste), "term.labels")
     fator  <- mean(exp(residuals(ajuste)))
     prev[partes == k] <- exp(predict(ajuste, newdata = teste)) * fator
   }
+  stopifnot(all(is.finite(prev)))
   erro <- casas_tratado$preco - prev
-  data.frame(Modelo = nome, RMSE = sqrt(mean(erro^2)), MAE = mean(abs(erro)))
+  list(
+    erros = data.frame(Procedimento = nome, RMSE = sqrt(mean(erro^2)),
+                        MAE = mean(abs(erro))),
+    frequencia = data.frame(Procedimento = nome, Termo = termos_completos,
+                            Partes = unname(colSums(inclusao)))
+  )
 })
-cv_res <- do.call(rbind, cv)
+cv_res <- do.call(rbind, lapply(cv, `[[`, "erros"))
 
 knitr::kable(
   cv_res, digits = 0,
-  caption = "Erros de validação cruzada (dólares canadenses)"
+  caption = "Erros de validação cruzada (CAD)"
 )
+
+frequencia_selecao <- dplyr::bind_rows(lapply(cv, `[[`, "frequencia")) |>
+  dplyr::filter(Procedimento != "Completo") |>
+  tidyr::pivot_wider(names_from = Procedimento, values_from = Partes)
+knitr::kable(frequencia_selecao,
+             caption = "Número de treinos em que cada covariável foi mantida (de 10)")
 ```
 
-Os três modelos erraram quase o mesmo: o RMSE ficou entre `r round(min(cv_res$RMSE))` e `r round(max(cv_res$RMSE))` dólares, uma diferença pequena perto do erro típico de mais de 15 mil. O reduzido foi o pior por pouco. Ou seja, na previsão os modelos praticamente empatam.
+O RMSE dos procedimentos varia de CAD `r formatar_cad(min(cv_res$RMSE))` a CAD `r formatar_cad(max(cv_res$RMSE))`, com amplitude de CAD `r formatar_cad(diff(range(cv_res$RMSE)))`. O AIC mantém o completo nos 10 treinos, por isso seus erros coincidem. Pelo BIC, `quartos` permanece em 3 treinos e `area_recreacao` em 2, mostrando que a composição do modelo reduzido depende das casas usadas no ajuste. Nesta partição, o BIC apresenta erro maior; uma única divisão em 10 partes não permite concluir equivalência preditiva nem quantificar a incerteza das diferenças. Como a semente difere da seção 4, pequenas diferenças no RMSE do modelo completo são esperadas.
 
 ## 5.3. Escolha do modelo final
 
 Escolhemos o **modelo completo**, com as 11 variáveis. Os motivos são:
 
-- o AIC e o teste F favorecem o modelo completo;
-- o BIC prefere o reduzido, mas a diferença para o completo é pequena (cerca de 2 pontos), e o BIC costuma ser mais exigente com o número de variáveis;
-- na validação cruzada os modelos tiveram desempenho parecido, então simplificar não trouxe ganho de previsão;
+- o AIC e o teste conjunto HC3 fornecem apoio exploratório ao modelo completo;
+- o BIC prefere o reduzido, com diferença de `r round(BIC(modelo_completo) - BIC(modelo_bic), 2)` pontos em relação ao completo, portanto esse critério favorece a simplificação;
+- consideramos os erros de validação cruzada como complemento, sem tratar pequenas diferenças em uma única partição como demonstração de superioridade;
 - o objetivo do trabalho é entender como as características das casas se associam ao preço, e o modelo completo permite interpretar todas elas.
 
 O modelo final é então
@@ -1112,7 +1169,7 @@ modelo_final <- modelo_completo
 summary(modelo_final)
 ```
 
-O modelo explica cerca de 68% da variabilidade do log do preço (R² ajustado = 0,680) e o teste F global é significativo (p \< 2,2e-16).
+O R² é `r round(summary(modelo_final)$r.squared, 3)`: o ajuste explica aproximadamente `r round(100 * summary(modelo_final)$r.squared, 1)`% da variabilidade amostral do log do preço. O R² ajustado é `r round(summary(modelo_final)$adj.r.squared, 3)`. O teste F global exibido em `summary()` é clássico e pressupõe homocedasticidade; para a inferência sobre coeficientes, usamos HC3 abaixo. A escolha do completo expressa o objetivo de interpretar as associações, sem descartar o reduzido como alternativa mais parcimoniosa.
 
 ## 5.4. Diagnóstico do modelo final
 
@@ -1134,7 +1191,7 @@ ggplot(diag_final, aes(ajustado, res_stud)) +
   theme_minimal()
 ```
 
-Os pontos ficam espalhados de forma aleatória em torno de zero e a linha de tendência é quase reta. Não aparece mais a curvatura nem o formato de funil que existiam no modelo inicial.
+A suavização fica mais próxima de zero do que no modelo inicial, sugerindo melhora da forma funcional. A curvatura e o funil são menos evidentes visualmente, mas isso não demonstra linearidade ou variância constante; consideramos também os testes e os resíduos por covariável da seção 4.
 
 ```{r}
 #| label: diag-final-qq
@@ -1142,7 +1199,7 @@ Os pontos ficam espalhados de forma aleatória em torno de zero e a linha de ten
 qqPlot(modelo_final, id = FALSE)
 ```
 
-No QQ-plot os pontos seguem bem a reta, com um desvio pequeno nas pontas, que fica dentro da faixa de confiança. A cauda superior longa do modelo inicial desapareceu.
+O centro da distribuição acompanha a reta melhor do que no modelo inicial, mas permanecem desvios nas caudas. As bandas do gráfico são referências pontuais, não um teste simultâneo de normalidade. A transformação reduziu a assimetria superior sem eliminar todos os desvios.
 
 ```{r}
 #| label: diag-final-testes
@@ -1152,22 +1209,33 @@ vif_final <- car::vif(modelo_final)
 
 cook <- cooks.distance(modelo_final)
 n <- nobs(modelo_final)
+influencia_final <- diagnosticar_davi(modelo_final)
+resumo_influencia_final <- data.frame(
+  Criterio = c("|Resíduo studentizado| > 3", "Alavancagem > 2p/n",
+                "Cook > 4/n", "|DFFITS| > 2 sqrt(p/n)"),
+  Casas = c(sum(influencia_final$residuo_alto),
+            sum(influencia_final$alavancagem_alta),
+            sum(influencia_final$cook_alto),
+            sum(influencia_final$dffits_alto))
+)
 
 bp
 sw
+knitr::kable(resumo_influencia_final,
+             caption = "Triagem de resíduos e influência no modelo final")
 ```
 
-- **Variância constante:** o teste de Breusch-Pagan deu p = `r signif(bp$p.value, 3)`. Rejeita a variância constante a 5%, mas não a 1%, então a heterocedasticidade que sobrou é pequena.
-- **Normalidade:** o Shapiro-Wilk deu p = `r signif(sw$p.value, 3)` e W = `r round(unname(sw$statistic), 3)`. Com 545 casas o teste detecta desvios muito pequenos, e o QQ-plot mostra que a distribuição está bem próxima da normal.
+- **Variância constante:** o teste de Breusch-Pagan deu p = `r signif(bp$p.value, 3)`, com rejeição a 5%. O p-valor não mede a intensidade da heterocedasticidade; não podemos qualificá-la como pequena apenas por não rejeitar a 1%.
+- **Normalidade:** o Shapiro-Wilk deu p = `r signif(sw$p.value, 3)` e W = `r round(unname(sw$statistic), 3)`, rejeitando a normalidade a 5%. O tamanho da amostra torna o teste sensível, mas não permite desconsiderar o resultado; os desvios nas caudas permanecem uma limitação.
 - **Multicolinearidade:** o maior VIF foi `r round(max(vif_final), 2)`, bem abaixo de 5.
-- **Pontos influentes:** `r sum(cook > 4 / n)` casas passaram do corte de $4/n$ para a distância de Cook, mas esse corte é só de triagem. A maior distância de Cook foi `r round(max(cook), 3)`, muito longe de 1, então nenhuma casa individual muda o ajuste de forma preocupante. Por isso mantivemos todas as observações.
+- **Pontos influentes:** `r sum(cook > 4 / n)` casas passaram do corte de $4/n$ e a maior distância de Cook foi `r round(max(cook), 3)`. Cook abaixo de 1 não descarta influência. Como o modelo final é o mesmo M2 da seção 4, aplica-se a análise de sensibilidade já realizada: retirar conjuntamente as 33 casas sinalizadas por Cook ou DFFITS não mudou os sinais, com mudança mediana das previsões de aproximadamente 0,89%. Mantemos todas as casas por não haver evidência de erro de registro, reconhecendo a sensibilidade das magnitudes dos coeficientes.
 - **Independência:** como na seção 3, os dados são de corte transversal e não temos informação de localização ou de ordem das vendas, então não foi possível testar esse pressuposto.
 
-Como o teste de Breusch-Pagan ainda rejeitou a 5%, usamos erros padrão robustos (HC3) nos intervalos e testes da próxima seção.
+Como o teste de Breusch-Pagan ainda rejeitou a 5%, usamos erros padrão robustos HC3 nos intervalos e testes da próxima seção. HC3 corrige a estimativa da covariância sob heterocedasticidade, mas não resolve possível dependência, erro de especificação ou a incerteza introduzida pela seleção de modelos.
 
 ## 5.5. Interpretação dos coeficientes
 
-A tabela abaixo traz as estimativas do modelo final, com intervalos de confiança de 95% e p-valores calculados com erros padrão HC3. Como a resposta está em log, o efeito de uma variável sobre o preço é $100\,[\exp(\beta) - 1]\%$. Essa conta não faz sentido para o intercepto, e `log(area_lote)` é interpretada de outro jeito, como elasticidade.
+As tabelas abaixo trazem as estimativas do modelo final, com intervalos de confiança de 95% e p-valores aproximados pela distribuição t com erros padrão HC3. Para cada unidade de uma covariável não transformada, a variação associada na média geométrica condicional do preço é $100\,[\exp(\beta) - 1]\%$, mantidas as demais constantes. Nos fatores, compara-se "sim" a "não". Essa conta não se aplica ao intercepto, e `log(area_lote)` é interpretada como elasticidade. A interpretação da média aritmética em CAD exige considerar a retransformação e a distribuição condicional dos erros.
 
 ```{r}
 #| label: tabela-final
@@ -1192,28 +1260,45 @@ tabela_final$p <- format.pval(tabela_final$p, digits = 2, eps = 0.001)
 
 options(knitr.kable.NA = "-")
 knitr::kable(
-  tabela_final,
+  tabela_final[c("termo", "estimativa", "ic_inf", "ic_sup", "p")],
+  row.names = FALSE,
   digits = 3,
-  col.names = c("Termo", "Estimativa", "IC inf.", "IC sup.", "p-valor (HC3)",
-                "Efeito (%)", "IC inf. (%)", "IC sup. (%)"),
-  caption = "Coeficientes do modelo final (escala log) e efeito percentual no preço"
+  col.names = c("Termo", "Estimativa", "IC inf.", "IC sup.", "p (HC3)"),
+  caption = "Coeficientes do modelo final e intervalos HC3 (escala log)"
+)
+knitr::kable(
+  tabela_final[usa_pct, c("termo", "efeito_pct", "pct_inf", "pct_sup")],
+  row.names = FALSE,
+  digits = 2,
+  col.names = c("Termo", "Variação (%)", "IC inf. (%)", "IC sup. (%)"),
+  caption = "Associações percentuais com a média geométrica do preço"
 )
 ```
 
 Mantendo as demais variáveis constantes:
 
-- **Área do lote:** a elasticidade estimada é 0,30 (IC 95%: 0,25 a 0,36). Um lote 10% maior está associado a um preço cerca de 3% maior.
+- **Área do lote:** a elasticidade estimada é 0,30 (IC 95%: 0,25 a 0,36). Um lote 10% maior está associado a uma média geométrica do preço `r round(100 * (1.1^coef(modelo_final)["log(area_lote)"] - 1), 2)`% maior, usando a expressão exata $100[(1{,}1)^\beta-1]$.
 - **Banheiros:** cada banheiro a mais está associado a um preço cerca de 18% maior (IC 95%: 13% a 23%).
-- **Ar-condicionado:** casas com ar-condicionado central custam em média cerca de 18% a mais (IC 95%: 13% a 23%).
+- **Ar-condicionado:** casas com ar-condicionado central apresentam média geométrica do preço cerca de 18% maior (IC 95%: 13% a 23%).
 - **Aquecimento a gás:** a diferença é de cerca de 20%, mas o intervalo é largo (7,5% a 33%), porque poucas casas têm essa característica.
 - **Bairro preferencial:** cerca de 14% a mais (IC 95%: 9% a 19%).
 - **Entrada para carro e porão:** cerca de 12% e 11% a mais, respectivamente.
 - **Andares:** cada andar a mais está associado a cerca de 10% a mais no preço.
 - **Vagas de garagem:** cerca de 5% a mais por vaga.
-- **Área de recreação e quartos:** têm os menores efeitos, cerca de 6% e 3,5% (por quarto). Seus intervalos ficam perto de zero (0,7% a 11,6% e 0,5% a 6,6%), então a evidência é mais fraca do que para as outras variáveis.
+- **Área de recreação e quartos:** apresentam associações de cerca de 6% e 3,5% (por quarto). Seus intervalos ficam perto de zero (0,7% a 11,6% e 0,5% a 6,6%), com evidência individual mais fraca. Isso não permite ordenar a importância das covariáveis sem considerar suas escalas e distribuições.
 
-Todas as variáveis continuam significativas a 5% com os erros padrão robustos. O intercepto não tem interpretação prática, já que não existe uma casa com lote de 1 m² e nenhuma das outras características.
+Todas as covariáveis apresentam p-valores individuais inferiores a 5% com HC3, condicionados à especificação adotada. Esses testes e intervalos não foram ajustados por multiplicidade ou pela seleção anterior, portanto devem ser interpretados de forma exploratória. O intercepto corresponde a uma casa com lote de 1 m², contagens iguais a zero e fatores na referência, configuração fora do domínio observado e sem interpretação prática aqui.
 
-Esses resultados são associações e não efeitos causais. Eles se referem à média geométrica do preço, não à média em dólares canadenses, e valem para as casas de Windsor em 1987.
+Esses resultados são associações e não efeitos causais. Eles se referem à média geométrica do preço em CAD, não à média aritmética, e valem para as casas de Windsor em 1987.
 
 # 6. Conclusão
+
+A análise das 545 casas, após a remoção de uma ocorrência duplicada, mostrou uma distribuição de preços assimétrica à direita e associações entre o preço e as características dos imóveis. O modelo linear na escala original apresentou curvatura nos resíduos, heterocedasticidade e desvios de normalidade. A multicolinearidade não foi acentuada, com VIF máximo próximo de 1,48, e os diagnósticos de influência motivaram uma análise de sensibilidade, sem exclusão automática de casas.
+
+O modelo com logaritmos do preço e da área do lote melhorou o comportamento dos resíduos e apresentou menor erro de validação cruzada que o modelo na escala original. Na seleção de covariáveis, o AIC manteve o modelo completo, enquanto o BIC retirou `quartos` e `area_recreacao`. Optamos pelo completo, com as 11 covariáveis, considerando o objetivo de interpretar as associações, o apoio exploratório do teste conjunto HC3 e o desempenho preditivo observado. O R² foi de aproximadamente 0,687 e o R² ajustado de 0,680, ambos relativos ao log do preço, e não ao preço em CAD.
+
+Mantidas as demais características constantes, todas as associações estimadas foram positivas. Por exemplo, um lote 10% maior se associou a uma média geométrica do preço aproximadamente 2,93% maior; um banheiro adicional, a cerca de 18% a mais; e a localização em área preferencial, a aproximadamente 14% a mais. Essas associações não demonstram causalidade nem devem ser extrapoladas automaticamente para outros mercados ou períodos.
+
+Na validação cruzada da seção 5, com a seleção refeita dentro de cada treino, o modelo completo e o procedimento AIC apresentaram RMSE de aproximadamente CAD 15.188 e MAE de CAD 11.046. O procedimento BIC apresentou RMSE de CAD 15.383. A diferença observada em uma única partição não estabelece superioridade definitiva, e os erros mostram que ainda existe variabilidade relevante dos preços não explicada pelas características disponíveis. A avaliação também permanece condicionada às transformações escolhidas anteriormente na base completa.
+
+As transformações não eliminaram todas as limitações: os testes ainda indicaram heterocedasticidade e desvios de normalidade, e não foi possível verificar adequadamente a independência dos erros com as informações disponíveis. Por isso, utilizamos erros padrão HC3 e interpretamos os testes e intervalos de forma exploratória, reconhecendo que não incorporam a incerteza da seleção. A análise de sensibilidade preservou os sinais dos coeficientes, mas não demonstrou ausência de influência sobre suas magnitudes. O modelo final fornece, portanto, uma descrição útil das associações nesta amostra de Windsor em 1987, com limitações que devem acompanhar qualquer interpretação ou previsão.
